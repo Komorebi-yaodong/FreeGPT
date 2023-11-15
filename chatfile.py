@@ -14,10 +14,11 @@ def collect_file(file_upload):
     return file_name,file_type
 
 
-def change_config(config_path,base_url,model,temperature):
+def change_config(config_path,base_url,api_key,model,temperature):
     with open(config_path,'r',encoding="utf-8") as f:
         config = json.load(f)
         config['base_url'] = base_url
+        config['api_key'] = api_key
         config['model'] = model
         config['temperature'] = temperature
     with open(config_path,'w',encoding="utf-8") as f:
@@ -30,12 +31,13 @@ def get_config(config_path):
     with open(config_path,'r',encoding="utf-8") as f:
         config = json.load(f)
         base_url = config['base_url']
+        api_key = config['api_key']
         model = config['model']
         temperature = config['temperature']
         data_path = config['data_path']
         sys_content = config['sys_content']
         max_tokens = config['max_tokens']
-    return base_url,model,temperature,data_path,sys_content,max_tokens
+    return base_url,api_key,model,temperature,data_path,sys_content,max_tokens
 
 
 def get_file(file_name,data_path):
@@ -146,7 +148,7 @@ def file_transform(file,file_name,type,data_path,sys_content):
                 content_message = {'role':'user','content':contents[i]}
                 dialogue_history.append(content_message)
             # end
-            end_message = "文章已发送完毕，接下来我将提出一些与文章相关的问题，请你使用中文，根据内容以markdown格式进行回复，我的第一个问题是'Summarize the main content of the article.'"
+            end_message = "文章已发送完毕，接下来我将提出一些与文章相关的问题，请你使用中文，根据内容以markdown格式进行回答，我的第一个问题是'Summarize the main content of the article.'"
             end_message = {'role':'user','content':end_message}
             dialogue_history.append(end_message)
 
