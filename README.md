@@ -7,7 +7,7 @@ support:`pdf`,`markdown`
 split pdf and turn to markdown, then send to openai api, get response
 
 ## use
-Ensure to create a new `/data/` folder in the same directory as the running file`.exe`.
+Ensure to create a new `/data/` folder in the same directory as the running file.
 
 ```
 pip install -r requirements.txt
