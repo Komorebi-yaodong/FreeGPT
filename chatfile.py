@@ -14,13 +14,14 @@ def collect_file(file_upload):
     return file_name,file_type
 
 
-def change_config(config_path,base_url,api_key,model,temperature):
+def change_config(config_path,base_url,api_key,model,temperature,memory):
     with open(config_path,'r',encoding="utf-8") as f:
         config = json.load(f)
         config['base_url'] = base_url
         config['api_key'] = api_key
         config['model'] = model
         config['temperature'] = temperature
+        config['memory'] = memory
     with open(config_path,'w',encoding="utf-8") as f:
         json.dump(config,f,ensure_ascii = False)
     return True
@@ -37,7 +38,8 @@ def get_config(config_path):
         data_path = config['data_path']
         sys_content = config['sys_content']
         max_tokens = config['max_tokens']
-    return base_url,api_key,model,temperature,data_path,sys_content,max_tokens
+        memory = config['memory']
+    return base_url,api_key,model,temperature,data_path,sys_content,max_tokens,memory
 
 
 def get_file(file_name,data_path):

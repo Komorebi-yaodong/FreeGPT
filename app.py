@@ -23,7 +23,7 @@ header.write(st.session_state.current_file, unsafe_allow_html=True)
 if "config_path" not in st.session_state:
     st.session_state["config_path"] = "./config.json"
 if "base_url" not in st.session_state:
-    st.session_state["base_url"],st.session_state["api_key"],st.session_state["model"],st.session_state["temperature"],st.session_state["data_path"],st.session_state["sys_content"],st.session_state["max_tokens"] = get_config(st.session_state["config_path"])
+    st.session_state["base_url"],st.session_state["api_key"],st.session_state["model"],st.session_state["temperature"],st.session_state["data_path"],st.session_state["sys_content"],st.session_state["max_tokens"],st.session_state["memory"] = get_config(st.session_state["config_path"])
 if "session" not in st.session_state:
     st.session_state["session"] = []
 if "dialogue_history" not in st.session_state:
@@ -42,8 +42,8 @@ if "client" not in st.session_state:
 def chatmd(flag,message,dialogue_history,session,model=st.session_state.model,temperature=st.session_state.temperature,max_tokens=st.session_state.max_tokens):
     # 将当前消息添加到对话历史中
     if flag:
-        dialogue_history.append(message)
         session.append(message)
+        dialogue_history.append(message)
     # 发送请求给 OpenAI GPT
     response = st.session_state.client.chat.completions.create(
         model=model,
@@ -60,12 +60,13 @@ def chatmd(flag,message,dialogue_history,session,model=st.session_state.model,te
             reply['content'] += part.choices[0].delta.content or ""
             line.empty()
             line.write(reply['content'])
-            
     session.append(reply)
-    dialogue_history.append(reply)
+    if flag:
+        dialogue_history.pop()
 
-@st.cache_data
+
 def show():
+    print(len(st.session_state["session"]))
     for section in st.session_state["session"]:
         with show_talk.chat_message(section['role']):
             st.write(section['content'],unsafe_allow_html=True)
@@ -174,16 +175,18 @@ with st.sidebar:
             api_key = st.text_input('api-key', st.session_state["api_key"])
             model = st.text_input('model', st.session_state["model"])
             temperature = st.slider('temperature', 0.0, 1.0, st.session_state["temperature"])
+            memory = st.toggle('memory', st.session_state["memory"])
             if st.button('Save'):
                 st.session_state["base_url"] =base_url
                 st.session_state["api_key"] = api_key
                 st.session_state["model"] =model
                 st.session_state["temperature"] =temperature
+                st.session_state["memory"] =memory
                 st.session_state["client"] = OpenAI(
                     api_key=st.session_state.api_key,
                     base_url = st.session_state.base_url,
                 )
-                flag = change_config(st.session_state["config_path"],st.session_state["base_url"],st.session_state["api_key"],st.session_state["model"],st.session_state["temperature"])
+                flag = change_config(st.session_state["config_path"],st.session_state["base_url"],st.session_state["api_key"],st.session_state["model"],st.session_state["temperature"],st.session_state["memory"])
                 if flag:
                     st.balloons()
 
