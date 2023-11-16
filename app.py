@@ -61,8 +61,11 @@ def chatmd(flag,message,dialogue_history,session,model=st.session_state.model,te
             line.empty()
             line.write(reply['content'])
     session.append(reply)
-    if flag:
-        dialogue_history.pop()
+    if not st.session_state["memory"]:
+        if flag:
+            dialogue_history.pop()
+    else:
+        dialogue_history.append(reply)
 
 
 def show():
