@@ -1,5 +1,5 @@
 import streamlit as st
-from chatfile import collect_file,change_config,get_config,file_transform,get_file,delete_file,get_history
+from chatfile import collect_file,pdf_transofrm
 from openai import OpenAI
 
 
@@ -20,16 +20,17 @@ show_talk = st.container()
 if "current_file" not in st.session_state:
     st.session_state["current_file"] = "<h2 style='text-align: center; color: grey;'>"+"当前无文件"+"</h2>"
 header.write(st.session_state.current_file, unsafe_allow_html=True)
-if "config_path" not in st.session_state:
-    st.session_state["config_path"] = "./config.json"
 if "base_url" not in st.session_state:
-    st.session_state["base_url"],st.session_state["api_key"],st.session_state["model"],st.session_state["temperature"],st.session_state["data_path"],st.session_state["sys_content"],st.session_state["max_tokens"],st.session_state["memory"] = get_config(st.session_state["config_path"])
+    st.session_state["base_url"] = ""
+    st.session_state["api_key"] = ""
+    st.session_state["model"] = "gpt-3.5-turbo"
+    st.session_state["temperature"] = 0.7
+    st.session_state["max_tokens"] = 1000
+    st.session_state["memory"] = False
 if "session" not in st.session_state:
     st.session_state["session"] = []
 if "dialogue_history" not in st.session_state:
     st.session_state["dialogue_history"] = []
-if "history" not in st.session_state:
-    st.session_state["history"] = get_history(st.session_state["data_path"])
 
 ########################### function ###########################
 if "client" not in st.session_state:
@@ -71,7 +72,6 @@ def chatmd(flag,message,dialogue_history,session,model=st.session_state.model,te
 
 
 def show():
-    print(len(st.session_state["session"]))
     for section in st.session_state["session"]:
         with show_talk.chat_message(section['role']):
             st.write(section['content'],unsafe_allow_html=True)
@@ -91,86 +91,15 @@ with st.sidebar:
                 file_name,file_type = collect_file(new_file)
                 st.session_state.current_file = "<h2 style='text-align: center; color: black;'>"+"Chat with "+file_name+"</h2>"
                 # 处理新文件
-                st.session_state["dialogue_history"]=file_transform(new_file,file_name,file_type,st.session_state["data_path"],st.session_state["sys_content"])
-                # 历史文件改变
-                st.session_state["history"] = get_history(st.session_state["data_path"])
+                st.session_state["dialogue_history"]=pdf_transofrm(new_file,file_name,file_type)
                 # 改变标头
                 header.write(st.session_state.current_file, unsafe_allow_html=True) 
                 # 重置会话
                 st.session_state["session"] = []             
                 # 发送给GPT
-                end_message = "文章已发送完毕，接下来我将提出一些与文章相关的问题，请你使用中文，根据内容以markdown格式进行回答，我的第一个问题是'Summarize the main content of the article.'"
-                end_message = {'role':'user','content':end_message}
-                chatmd(False,end_message,st.session_state["dialogue_history"],st.session_state["session"])
+                chatmd(False,None,st.session_state["dialogue_history"],st.session_state["session"])
             else:
                 header.write(st.session_state.current_file, unsafe_allow_html=True)
-    
-    # 历史文件
-    with st.container():
-        with st.expander("History"):
-            if st.button("Update"):
-                st.session_state["history"] = get_history(st.session_state["data_path"])
-                with st.container():
-                    choose_file = st.selectbox(
-                        '你可以选择以下历史文件',
-                        st.session_state["history"])
-                    if choose_file:
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button("√"):
-                                st.session_state.current_file = "<h2 style='text-align: center; color: black;'>"+"Chat with "+choose_file+"</h2>"
-                                # 处理新文件
-                                st.session_state["dialogue_history"]=get_file(choose_file,st.session_state["data_path"])
-                                # 历史文件改变
-                                st.session_state["history"] = get_history(st.session_state["data_path"])
-                                # 改变标头
-                                header.write(st.session_state.current_file, unsafe_allow_html=True) 
-                                # 重置会话
-                                st.session_state["session"] = []             
-                                # 发送给GPT
-                                end_message = "文章已发送完毕，接下来我将提出一些与文章相关的问题，请你使用中文，根据内容以markdown格式进行回答，我的第一个问题是'Summarize the main content of the article.'"
-                                end_message = {'role':'user','content':end_message}
-                                chatmd(False,end_message,st.session_state["dialogue_history"],st.session_state["session"])
-                        with col2:
-                            if st.button("X"):
-                                if choose_file == st.session_state.current_file:
-                                    st.session_state.current_file = "<h2 style='text-align: center; color: grey;'>"+"当前无文件"+"</h2>"
-                                    st.session_state["history"] = []
-                                    header.write(st.session_state.current_file, unsafe_allow_html=True) 
-                                    st.session_state["session"] = []
-                                st.session_state["history"] = get_history(st.session_state["data_path"])
-                                delete_file(choose_file,st.session_state["data_path"])
-            else:
-                with st.container():
-                    choose_file = st.selectbox(
-                        '你可以选择以下历史文件',
-                        st.session_state["history"])
-                    if choose_file:
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button("√"):
-                                st.session_state.current_file = "<h2 style='text-align: center; color: black;'>"+"Chat with "+choose_file+"</h2>"
-                                # 处理新文件
-                                st.session_state["dialogue_history"]=get_file(choose_file,st.session_state["data_path"])
-                                # 历史文件改变
-                                st.session_state["history"] = get_history(st.session_state["data_path"])
-                                # 改变标头
-                                header.write(st.session_state.current_file, unsafe_allow_html=True) 
-                                # 重置会话
-                                st.session_state["session"] = []             
-                                # 发送给GPT
-                                end_message = "文章已发送完毕，接下来我将提出一些与文章相关的问题，请你使用中文，根据内容以markdown格式进行回答，我的第一个问题是'Summarize the main content of the article.'"
-                                end_message = {'role':'user','content':end_message}
-                                chatmd(False,end_message,st.session_state["dialogue_history"],st.session_state["session"])
-                        with col2:
-                            if st.button("X"):
-                                if choose_file == st.session_state.current_file:
-                                    st.session_state.current_file = "<h2 style='text-align: center; color: grey;'>"+"当前无文件"+"</h2>"
-                                    st.session_state["history"] = []
-                                    header.write(st.session_state.current_file, unsafe_allow_html=True) 
-                                    st.session_state["session"] = []
-                                st.session_state["history"] = get_history(st.session_state["data_path"])
-                                delete_file(choose_file,st.session_state["data_path"])
     
     # 设置
     with st.container():
@@ -191,9 +120,7 @@ with st.sidebar:
                     api_key=st.session_state.api_key,
                     base_url = st.session_state.base_url,
                 )
-                flag = change_config(st.session_state["config_path"],st.session_state["base_url"],st.session_state["api_key"],st.session_state["model"],st.session_state["temperature"],st.session_state["memory"])
-                if flag:
-                    st.balloons()
+                st.balloons()
 
 
 ###########################聊天区域###########################
