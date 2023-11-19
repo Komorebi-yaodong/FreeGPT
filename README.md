@@ -1,19 +1,19 @@
-# Chat with file(openai + streamlit by python)
+# Chat with file(openai + gpt4free + streamlit by python)
 
 ## now
-support:`pdf`,`markdown`
+
+support:`pdf`,`docx`
 
 ## way
+
 split pdf and turn to markdown, then send to openai api, get response
 
 ## use
-Ensure to create a new `/data/` folder in the same directory as the running file.
-
 ```
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
 ## features
+with free api
 use url_base and api-key(no api?`https://github.com/chatanywhere/GPT_API_free.git`)
-

@@ -1,7 +1,26 @@
 import streamlit as st
 from chatfile import collect_file,pdf_transofrm
 from openai import OpenAI
+import g4f
+from g4f.Provider   import (
+    Chatgpt4Online,
+    OnlineGpt,
+    ChatBase,
+    GeekGpt,
+    Liaobots,
+    Phind,
+    Koala,
+)
 
+_providers = {
+    'Chatgpt4Online':Chatgpt4Online,
+    'OnlineGpt':OnlineGpt,
+    'ChatBase':ChatBase,
+    'GeekGpt':GeekGpt,
+    'Liaobots':Liaobots,
+    'Phind':Phind,
+    'Koala':Koala,
+}
 
 ########################### 一些样式 ###########################
 
@@ -27,18 +46,46 @@ if "base_url" not in st.session_state:
     st.session_state["temperature"] = 0.7
     st.session_state["max_tokens"] = 1000
     st.session_state["memory"] = False
+    st.session_state["g4fmodel"] = "gpt-3.5-turbo-16k"
+    st.session_state["mode"] = "GeekGpt"
+    st.session_state["provider"] = _providers['Chatgpt4Online']
 if "session" not in st.session_state:
     st.session_state["session"] = []
 if "dialogue_history" not in st.session_state:
     st.session_state["dialogue_history"] = []
 
 ########################### function ###########################
-if "client" not in st.session_state:
-    st.session_state["client"] = OpenAI(
-        api_key=st.session_state.api_key,
-        base_url = st.session_state.base_url,
-    )
 
+def chatg4f(flag,message,dialogue_history,session,model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature,max_tokens=st.session_state.max_tokens):
+    # 将当前消息添加到对话历史中
+    if flag:
+        session.append(message)
+        dialogue_history.append(message)
+    # 发送请求给 OpenAI GPT
+    response = g4f.ChatCompletion.create(
+        model=model,
+        provider = provider,
+        messages=dialogue_history,
+        temperature=temperature, # 控制模型输出的随机程度
+        max_tokens=max_tokens,  # 控制生成回复的最大长度
+        stream=True
+    )
+    show()
+    reply = {'role':'assistant','content':""}
+    with show_talk.chat_message(reply['role']):
+        line = st.empty()
+        for message in response:
+            reply['content'] += message
+            line.empty()
+            line.write(reply['content'])
+    session.append(reply)
+    if not st.session_state["memory"]:
+        if flag:
+            dialogue_history.pop()
+        else:
+            dialogue_history.append(reply)
+    else:
+        dialogue_history.append(reply)
 
 def chatmd(flag,message,dialogue_history,session,model=st.session_state.model,temperature=st.session_state.temperature,max_tokens=st.session_state.max_tokens):
     # 将当前消息添加到对话历史中
@@ -46,7 +93,11 @@ def chatmd(flag,message,dialogue_history,session,model=st.session_state.model,te
         session.append(message)
         dialogue_history.append(message)
     # 发送请求给 OpenAI GPT
-    response = st.session_state.client.chat.completions.create(
+    client = OpenAI(
+        api_key=st.session_state.api_key,
+        base_url = st.session_state.base_url,
+    )
+    response = client.chat.completions.create(
         model=model,
         messages=dialogue_history,
         temperature=temperature, # 控制模型输出的随机程度
@@ -91,36 +142,56 @@ with st.sidebar:
                 file_name,file_type = collect_file(new_file)
                 st.session_state.current_file = "<h2 style='text-align: center; color: black;'>"+"Chat with "+file_name+"</h2>"
                 # 处理新文件
-                st.session_state["dialogue_history"]=pdf_transofrm(new_file,file_name,file_type)
+                st.session_state["dialogue_history"]=pdf_transofrm(new_file,file_type)
                 # 改变标头
                 header.write(st.session_state.current_file, unsafe_allow_html=True) 
                 # 重置会话
                 st.session_state["session"] = []             
                 # 发送给GPT
-                chatmd(False,None,st.session_state["dialogue_history"],st.session_state["session"])
+                if st.session_state.mode == "Gpt4Free":
+                    chatg4f(False,None,st.session_state["dialogue_history"],st.session_state["session"])
+                else:
+                    chatmd(False,None,st.session_state["dialogue_history"],st.session_state["session"])
             else:
                 header.write(st.session_state.current_file, unsafe_allow_html=True)
     
     # 设置
     with st.container():
         with st.expander("Settings"):
-
-            base_url = st.text_input('base url', st.session_state["base_url"])
-            api_key = st.text_input('api-key', st.session_state["api_key"])
-            model = st.text_input('model', st.session_state["model"])
-            temperature = st.slider('temperature', 0.0, 1.0, st.session_state["temperature"])
-            memory = st.toggle('memory', st.session_state["memory"])
-            if st.button('Save'):
-                st.session_state["base_url"] =base_url
-                st.session_state["api_key"] = api_key
-                st.session_state["model"] =model
-                st.session_state["temperature"] =temperature
-                st.session_state["memory"] =memory
-                st.session_state["client"] = OpenAI(
-                    api_key=st.session_state.api_key,
-                    base_url = st.session_state.base_url,
-                )
-                st.balloons()
+            st.session_state.mode = st.selectbox("Mode",["SelfApi","Gpt4Free"])
+            if st.session_state.mode == "Gpt4Free":
+                g4fmodel = st.selectbox('models', ["gpt-3.5-turbo-16k","gpt-3.5-turbo-0613","gpt-4"])
+                providers = st.selectbox('provider', ['GeekGpt','OnlineGpt','ChatBase','Chatgpt4Online','Liaobots','Phind','Koala'])
+                memory = st.toggle('memory', st.session_state["memory"])
+                temperature = st.slider('temperature', 0.0, 1.0, st.session_state["temperature"])
+                max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
+                if st.button('Save'):
+                    if g4fmodel == "gpt-4":
+                        st.session_state.g4fmodel = g4f.models.gpt_4
+                    elif g4fmodel == "gpt-3.5-turbo-16k":
+                        st.session_state.g4fmodel = g4f.models.gpt_35_turbo_16k
+                    else:
+                        st.session_state.g4fmodel = g4f.models.gpt_35_turbo_0613
+                    st.session_state["provider"] =_providers[providers]
+                    st.session_state["temperature"] =temperature
+                    st.session_state["memory"] =memory
+                    st.session_state["max_tokens"] = max_tokens
+                    st.balloons()
+            else:
+                base_url = st.text_input('base url', st.session_state["base_url"])
+                api_key = st.text_input('api-key', st.session_state["api_key"])
+                model = st.text_input('model', st.session_state["model"])
+                memory = st.toggle('memory', st.session_state["memory"])
+                temperature = st.slider('temperature', 0.0, 1.0, st.session_state["temperature"])
+                max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
+                if st.button('Save'):
+                    st.session_state["base_url"] =base_url
+                    st.session_state["api_key"] = api_key
+                    st.session_state["model"] =model
+                    st.session_state["temperature"] =temperature
+                    st.session_state["max_tokens"] = max_tokens
+                    st.session_state["memory"] =memory
+                    st.balloons()
 
 
 ###########################聊天区域###########################
@@ -130,6 +201,8 @@ with st.container():
     prompt = st.chat_input("Send a message")
     if prompt:
         message = {"role":"user","content":prompt}
-        chatmd(True,message,st.session_state["dialogue_history"],st.session_state["session"])
-        # show()
+        if st.session_state.mode == "Gpt4Free":
+            chatg4f(True,message,st.session_state["dialogue_history"],st.session_state["session"])
+        else:
+            chatmd(True,message,st.session_state["dialogue_history"],st.session_state["session"])
 

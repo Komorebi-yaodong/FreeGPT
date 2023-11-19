@@ -1,11 +1,9 @@
-import os
 import json
-import shutil
 import PyPDF2
 from docx import Document
 
-sys_content = "You are a article reading software. Next, the user will send an article in MD file format. After reading, you should fully understand the content of the article and be able to analyze, interpret, and respond to questions related to the article in both Chinese and Markdown formats. Answer step-by-step."
-end_file_message = "文章发送完毕，请你使用中文，根据内容以markdown格式进行回答，我第一个要求是'Summarize and distill the main content of the article.'"
+sys_content = "You are a article reading software. Next, the user will send an article. After reading, you should fully understand the content of the article and be able to analyze, interpret, and respond to questions related to the article in both Chinese and Markdown formats. Answer step-by-step."
+end_file_message = "Article sent. Please reply in Chinese and format your response using markdown based on the content. My first requirement is'Summarize and distill the main content of the article.'"
 
 # 文件收集
 def collect_file(file_upload):
@@ -15,25 +13,12 @@ def collect_file(file_upload):
     return file_name,file_type
 
 
-def change_config(config_path,base_url,api_key,model,temperature,memory):
-    with open(config_path,'r',encoding="utf-8") as f:
-        config = json.load(f)
-        config['base_url'] = base_url
-        config['api_key'] = api_key
-        config['model'] = model
-        config['temperature'] = temperature
-        config['memory'] = memory
-    with open(config_path,'w',encoding="utf-8") as f:
-        json.dump(config,f,ensure_ascii = False)
-    return True
-
-
 def extract_text_from_pdf(file):
-    pdf = PyPDF2.PdfFileReader(file)
+    pdf = PyPDF2.PdfReader(file)
     text = ""
-    for page_num in range(pdf.getNumPages()):
-        page = pdf.getPage(page_num)
-        text += page.extractText()
+    for page_num in range(len(pdf.pages)):
+        page = pdf.pages[page_num]
+        text += page.extract_text()
         
     return text
 
@@ -47,7 +32,7 @@ def extract_text_from_docx(file):
 
 
 # 直接读取pdf获得文本
-def pdf_transofrm(file,file_name,type):
+def pdf_transofrm(file,type):
 
     def ContentSplit(string,length):
         return [string[i:i+length] for i in range(0, len(string), length)]

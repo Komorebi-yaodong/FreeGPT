@@ -1,3 +1,5 @@
 openai
 PyPDF2
 streamlit
+g4f
+python-docx
