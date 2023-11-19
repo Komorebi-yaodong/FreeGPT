@@ -53,6 +53,11 @@ if "session" not in st.session_state:
     st.session_state["session"] = []
 if "dialogue_history" not in st.session_state:
     st.session_state["dialogue_history"] = []
+if "client" not in st.session_state:
+    st.session_state["client"] = OpenAI(
+        api_key=st.session_state.api_key,
+        base_url = st.session_state.base_url,
+    )
 
 ########################### function ###########################
 
@@ -93,11 +98,8 @@ def chatmd(flag,message,dialogue_history,session,model=st.session_state.model,te
         session.append(message)
         dialogue_history.append(message)
     # 发送请求给 OpenAI GPT
-    client = OpenAI(
-        api_key=st.session_state.api_key,
-        base_url = st.session_state.base_url,
-    )
-    response = client.chat.completions.create(
+    # print(dialogue_history)
+    response = st.session_state.client.chat.completions.create(
         model=model,
         messages=dialogue_history,
         temperature=temperature, # 控制模型输出的随机程度
@@ -191,6 +193,10 @@ with st.sidebar:
                     st.session_state["temperature"] =temperature
                     st.session_state["max_tokens"] = max_tokens
                     st.session_state["memory"] =memory
+                    st.session_state.client = OpenAI(
+                        api_key=st.session_state.api_key,
+                        base_url = st.session_state.base_url,
+                    )
                     st.balloons()
 
 

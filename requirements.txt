@@ -3,3 +3,4 @@ PyPDF2
 streamlit
 g4f
 python-docx
+httpx==0.23.0
