@@ -180,10 +180,10 @@ with st.sidebar:
                     else:
                         st.session_state.g4fmodel = g4f.models.gpt_35_long
                     st.session_state["provider"] =_providers[providers]
-                    # if providers == "Bard":
-                    #     st.session_state["stream"] = False
-                    # else:
-                    #     st.session_state["stream"] = True
+                    if providers == "Bard":
+                        st.session_state["stream"] = False
+                    else:
+                        st.session_state["stream"] = True
                     st.session_state["temperature"] =temperature
                     st.session_state["memory"] =memory
                     st.session_state["max_tokens"] = max_tokens
