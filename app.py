@@ -3,7 +3,7 @@ from chatfile import collect_file,pdf_transofrm
 from openai import OpenAI
 import g4f
 from g4f.Provider   import (
-    Chatgpt4Online,
+    AiChatOnline,
     OnlineGpt,
     ChatBase,
     GeekGpt,
@@ -11,17 +11,19 @@ from g4f.Provider   import (
     Liaobots,
     Phind,
     Koala,
+    Bard,
 )
 
 _providers = {
-    'Chatgpt4Online':Chatgpt4Online,
+    'AiChatOnline':AiChatOnline,
     'OnlineGpt':OnlineGpt,
+    'Liaobots':Liaobots,
+    'Hashnode':Hashnode,
     'ChatBase':ChatBase,
     'GeekGpt':GeekGpt,
-    'Hashnode':Hashnode,
-    'Liaobots':Liaobots,
-    'Phind':Phind,
     'Koala':Koala,
+    'Phind':Phind,
+    'Bard':Bard,
 }
 
 ########################### 一些样式 ###########################
@@ -50,7 +52,7 @@ if "base_url" not in st.session_state:
     st.session_state["memory"] = False
     st.session_state["g4fmodel"] = "gpt-3.5-turbo-16k"
     st.session_state["mode"] = "Gpt4Free"
-    st.session_state["provider"] = _providers['GeekGpt']
+    st.session_state["provider"] = _providers['OnlineGpt']
     st.session_state["stream"] = True
 if "session" not in st.session_state:
     st.session_state["session"] = []
@@ -165,23 +167,23 @@ with st.sidebar:
         with st.expander("Settings"):
             st.session_state.mode = st.selectbox("Mode",["Gpt4Free","SelfApi"])
             if st.session_state.mode == "Gpt4Free":
-                g4fmodel = st.selectbox('models', ["gpt-3.5-turbo-16k","gpt-3.5-turbo-0613","gpt-4"])
-                providers = st.selectbox('provider', ['GeekGpt','OnlineGpt','ChatBase','Chatgpt4Online','Liaobots','Phind','Koala','Hashnode'])
+                g4fmodel = st.selectbox('models', ["gpt_35_long","gpt_35_turbo_16k_0613","gpt-4"])
+                providers = st.selectbox('provider', ['OnlineGpt','GeekGpt','ChatBase','AiChatOnline','Bard','Liaobots','Phind','Koala','Hashnode'])
                 memory = st.toggle('memory', st.session_state["memory"])
                 temperature = st.slider('temperature', 0.0, 1.0, st.session_state["temperature"])
                 max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
                 if st.button('Save'):
                     if g4fmodel == "gpt-4":
                         st.session_state.g4fmodel = g4f.models.gpt_4
-                    elif g4fmodel == "gpt-3.5-turbo-16k":
-                        st.session_state.g4fmodel = g4f.models.gpt_35_turbo_16k
+                    elif g4fmodel == "gpt_35_turbo_16k_0613":
+                        st.session_state.g4fmodel = g4f.models.gpt_35_turbo_16k_0613
                     else:
-                        st.session_state.g4fmodel = g4f.models.gpt_35_turbo_0613
+                        st.session_state.g4fmodel = g4f.models.gpt_35_long
                     st.session_state["provider"] =_providers[providers]
-                    if providers == "Chatgpt4Online":
-                        st.session_state["stream"] = False
-                    else:
-                        st.session_state["stream"] = True
+                    # if providers == "Bard":
+                    #     st.session_state["stream"] = False
+                    # else:
+                    #     st.session_state["stream"] = True
                     st.session_state["temperature"] =temperature
                     st.session_state["memory"] =memory
                     st.session_state["max_tokens"] = max_tokens

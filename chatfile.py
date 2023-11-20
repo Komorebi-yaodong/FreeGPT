@@ -1,9 +1,8 @@
-import json
 import PyPDF2
 from docx import Document
 
-sys_content = "You are a article reading software. Next, the user will send an article. After reading, you should fully understand the content of the article and be able to analyze, interpret, and respond to questions related to the article in both Chinese and Markdown formats. Answer step-by-step."
-end_file_message = "Article sent. Please reply in Chinese and format your response using markdown based on the content. My first requirement is'Summarize and distill the main content of the article.'"
+sys_content = " You are a read-file master. You will receive a document and reply my requirements in Chinese. Instruction:  Compose a comprehensive reply to the query using the search results given. Cite each reference using [ Page Number] notation (every result has this number at the beginning). Citation should be done at the end of each sentence. If the search results mention multiple subjects with the same name, create separate answers for each. Make sure the answer is correct and don't output false content. Only answer what is asked. The answer should be short and concise. Answer step-by-step and reply in markdown format."
+end_file_message = "Document sent. Please reply in Chinese and format your response using markdown based on the content. My first requirement is'Summarize and main content of the article.'"
 
 # 文件收集
 def collect_file(file_upload):
@@ -50,9 +49,10 @@ def pdf_transofrm(file,type):
     # 读取文件内容
     
     dialogue_history = [{'role':'system','content':sys_content},]
-    contents = ContentSplit(content,3900) # 分段内容
+    # print(f"\n\n本文一共有{len(content)}字\n\n")
+    contents = ContentSplit(content,4000) # 分段内容
     pages = len(contents) # 分段数
-    # print(f"\n\n{pages}\n\n")
+    # print(f"\n\n本文一共有{pages}页\n\n")
 
     ## 分段输入
     # start
@@ -65,6 +65,7 @@ def pdf_transofrm(file,type):
     # end
     end_message = {'role':'user','content':end_file_message}
     dialogue_history.append(end_message)
+    # print(dialogue_history)
 
 
     return dialogue_history
