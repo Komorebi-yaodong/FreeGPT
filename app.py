@@ -7,6 +7,7 @@ from g4f.Provider   import (
     OnlineGpt,
     ChatBase,
     GeekGpt,
+    Hashnode,
     Liaobots,
     Phind,
     Koala,
@@ -17,6 +18,7 @@ _providers = {
     'OnlineGpt':OnlineGpt,
     'ChatBase':ChatBase,
     'GeekGpt':GeekGpt,
+    'Hashnode':Hashnode,
     'Liaobots':Liaobots,
     'Phind':Phind,
     'Koala':Koala,
@@ -47,8 +49,9 @@ if "base_url" not in st.session_state:
     st.session_state["max_tokens"] = 1000
     st.session_state["memory"] = False
     st.session_state["g4fmodel"] = "gpt-3.5-turbo-16k"
-    st.session_state["mode"] = "GeekGpt"
-    st.session_state["provider"] = _providers['Chatgpt4Online']
+    st.session_state["mode"] = "Gpt4Free"
+    st.session_state["provider"] = _providers['GeekGpt']
+    st.session_state["stream"] = True
 if "session" not in st.session_state:
     st.session_state["session"] = []
 if "dialogue_history" not in st.session_state:
@@ -61,7 +64,7 @@ if "client" not in st.session_state:
 
 ########################### function ###########################
 
-def chatg4f(flag,message,dialogue_history,session,model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature,max_tokens=st.session_state.max_tokens):
+def chatg4f(flag,message,dialogue_history,session,stream=st.session_state["stream"],model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature,max_tokens=st.session_state.max_tokens):
     # 将当前消息添加到对话历史中
     if flag:
         session.append(message)
@@ -73,7 +76,7 @@ def chatg4f(flag,message,dialogue_history,session,model=st.session_state.g4fmode
         messages=dialogue_history,
         temperature=temperature, # 控制模型输出的随机程度
         max_tokens=max_tokens,  # 控制生成回复的最大长度
-        stream=True
+        stream=stream
     )
     show()
     reply = {'role':'assistant','content':""}
@@ -148,7 +151,7 @@ with st.sidebar:
                 # 改变标头
                 header.write(st.session_state.current_file, unsafe_allow_html=True) 
                 # 重置会话
-                st.session_state["session"] = []             
+                st.session_state["session"] = []    
                 # 发送给GPT
                 if st.session_state.mode == "Gpt4Free":
                     chatg4f(False,None,st.session_state["dialogue_history"],st.session_state["session"])
@@ -160,10 +163,10 @@ with st.sidebar:
     # 设置
     with st.container():
         with st.expander("Settings"):
-            st.session_state.mode = st.selectbox("Mode",["SelfApi","Gpt4Free"])
+            st.session_state.mode = st.selectbox("Mode",["Gpt4Free","SelfApi"])
             if st.session_state.mode == "Gpt4Free":
                 g4fmodel = st.selectbox('models', ["gpt-3.5-turbo-16k","gpt-3.5-turbo-0613","gpt-4"])
-                providers = st.selectbox('provider', ['GeekGpt','OnlineGpt','ChatBase','Chatgpt4Online','Liaobots','Phind','Koala'])
+                providers = st.selectbox('provider', ['GeekGpt','OnlineGpt','ChatBase','Chatgpt4Online','Liaobots','Phind','Koala','Hashnode'])
                 memory = st.toggle('memory', st.session_state["memory"])
                 temperature = st.slider('temperature', 0.0, 1.0, st.session_state["temperature"])
                 max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
@@ -175,6 +178,10 @@ with st.sidebar:
                     else:
                         st.session_state.g4fmodel = g4f.models.gpt_35_turbo_0613
                     st.session_state["provider"] =_providers[providers]
+                    if providers == "Chatgpt4Online":
+                        st.session_state["stream"] = False
+                    else:
+                        st.session_state["stream"] = True
                     st.session_state["temperature"] =temperature
                     st.session_state["memory"] =memory
                     st.session_state["max_tokens"] = max_tokens
@@ -198,6 +205,15 @@ with st.sidebar:
                         base_url = st.session_state.base_url,
                     )
                     st.balloons()
+    with st.container():
+        if st.button('Clear'):
+            st.session_state["current_file"] = "<h2 style='text-align: center; color: grey;'>"+"当前无文件"+"</h2>"
+            # 处理新文件
+            st.session_state["dialogue_history"]=[]
+            # 改变标头
+            header.write(st.session_state.current_file, unsafe_allow_html=True) 
+            # 重置会话
+            st.session_state["session"] = []  
 
 
 ###########################聊天区域###########################

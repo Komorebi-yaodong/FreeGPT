@@ -50,8 +50,9 @@ def pdf_transofrm(file,type):
     # 读取文件内容
     
     dialogue_history = [{'role':'system','content':sys_content},]
-    contents = ContentSplit(content,1000) # 分段内容
+    contents = ContentSplit(content,3900) # 分段内容
     pages = len(contents) # 分段数
+    # print(f"\n\n{pages}\n\n")
 
     ## 分段输入
     # start
