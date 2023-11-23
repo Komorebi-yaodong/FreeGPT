@@ -1,6 +1,6 @@
-openai
 PyPDF2
 streamlit
 g4f
+openai
 python-docx
-httpx==0.24.1
+httpx==0.23.0

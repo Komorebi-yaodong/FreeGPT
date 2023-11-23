@@ -9,9 +9,7 @@ from g4f.Provider   import (
     GeekGpt,
     Hashnode,
     Liaobots,
-    Phind,
     Koala,
-    Bard,
 )
 
 _providers = {
@@ -22,8 +20,6 @@ _providers = {
     'ChatBase':ChatBase,
     'GeekGpt':GeekGpt,
     'Koala':Koala,
-    'Phind':Phind,
-    'Bard':Bard,
 }
 
 ########################### 一些样式 ###########################
@@ -56,6 +52,8 @@ if "base_url" not in st.session_state:
     st.session_state["stream"] = True
 if "session" not in st.session_state:
     st.session_state["session"] = []
+if "sys_content" not in st.session_state:
+    st.session_state["sys_content"] = "You are a read-file master. You will receive a document and reply my requirements in Chinese. Instruction: Compose a comprehensive reply to the query using the search results given. Cite each reference using [ Page Number] notation (every result has this number at the beginning). Citation should be done at the end of each sentence. If the search results mention multiple subjects with the same name, create separate answers for each. Make sure the answer is correct and don't output false content. Only answer what is asked. The answer should be short and concise. Answer step-by-step and reply in markdown format."
 if "dialogue_history" not in st.session_state:
     st.session_state["dialogue_history"] = []
 if "client" not in st.session_state:
@@ -149,7 +147,8 @@ with st.sidebar:
                 file_name,file_type = collect_file(new_file)
                 st.session_state.current_file = "<h2 style='text-align: center; color: black;'>"+"Chat with "+file_name+"</h2>"
                 # 处理新文件
-                st.session_state["dialogue_history"]=pdf_transofrm(new_file,file_type)
+                dialogue_history = [{'role':'system','content':st.session_state.sys_content}]
+                st.session_state["dialogue_history"]=st.session_state["dialogue_history"]+pdf_transofrm(new_file,file_type)
                 # 改变标头
                 header.write(st.session_state.current_file, unsafe_allow_html=True) 
                 # 重置会话
@@ -167,26 +166,32 @@ with st.sidebar:
         with st.expander("Settings"):
             st.session_state.mode = st.selectbox("Mode",["Gpt4Free","SelfApi"])
             if st.session_state.mode == "Gpt4Free":
-                g4fmodel = st.selectbox('models', ["gpt_35_long","gpt_35_turbo_16k_0613","gpt-4"])
-                providers = st.selectbox('provider', ['OnlineGpt','GeekGpt','ChatBase','AiChatOnline','Bard','Liaobots','Phind','Koala','Hashnode'])
+                g4fmodel = st.selectbox('models', ["gpt_35_turbo_16k_0613","text_davinci_003","gpt_35_long","gpt-4"])
+                providers = st.selectbox('provider', ['OnlineGpt','GeekGpt','ChatBase','AiChatOnline','Liaobots','Koala','Hashnode'])
                 memory = st.toggle('memory', st.session_state["memory"])
                 temperature = st.slider('temperature', 0.0, 1.0, st.session_state["temperature"])
                 max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
+                sys_content = st.text_input('sys_prompt', st.session_state["sys_content"])
                 if st.button('Save'):
                     if g4fmodel == "gpt-4":
                         st.session_state.g4fmodel = g4f.models.gpt_4
                     elif g4fmodel == "gpt_35_turbo_16k_0613":
                         st.session_state.g4fmodel = g4f.models.gpt_35_turbo_16k_0613
+                    elif g4fmodel == "text_davinci_003":
+                        st.session_state.g4fmodel = g4f.models.text_davinci_003   
                     else:
                         st.session_state.g4fmodel = g4f.models.gpt_35_long
                     st.session_state["provider"] =_providers[providers]
-                    if providers == "Bard":
-                        st.session_state["stream"] = False
-                    else:
-                        st.session_state["stream"] = True
+                    # if providers == "Bard":
+                    #     st.session_state["stream"] = False
+                    # else:
+                    #     st.session_state["stream"] = True
                     st.session_state["temperature"] =temperature
                     st.session_state["memory"] =memory
                     st.session_state["max_tokens"] = max_tokens
+                    st.session_state["sys_content"] = sys_content
+                    dialogue_history = [{'role':'system','content':st.session_state.sys_content}]
+                    st.session_state["session"] = []  
                     st.balloons()
             else:
                 base_url = st.text_input('base url', st.session_state["base_url"])
@@ -195,6 +200,7 @@ with st.sidebar:
                 memory = st.toggle('memory', st.session_state["memory"])
                 temperature = st.slider('temperature', 0.0, 1.0, st.session_state["temperature"])
                 max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
+                sys_content = st.text_input('sys_prompt', st.session_state["sys_content"])
                 if st.button('Save'):
                     st.session_state["base_url"] =base_url
                     st.session_state["api_key"] = api_key
@@ -202,6 +208,9 @@ with st.sidebar:
                     st.session_state["temperature"] =temperature
                     st.session_state["max_tokens"] = max_tokens
                     st.session_state["memory"] =memory
+                    st.session_state["sys_content"] = sys_content
+                    dialogue_history = [{'role':'system','content':st.session_state.sys_content}]
+                    st.session_state["session"] = []  
                     st.session_state.client = OpenAI(
                         api_key=st.session_state.api_key,
                         base_url = st.session_state.base_url,
@@ -211,7 +220,7 @@ with st.sidebar:
         if st.button('Clear'):
             st.session_state["current_file"] = "<h2 style='text-align: center; color: grey;'>"+"当前无文件"+"</h2>"
             # 处理新文件
-            st.session_state["dialogue_history"]=[]
+            dialogue_history = [{'role':'system','content':st.session_state.sys_content},]
             # 改变标头
             header.write(st.session_state.current_file, unsafe_allow_html=True) 
             # 重置会话

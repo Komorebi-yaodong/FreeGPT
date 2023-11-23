@@ -1,7 +1,7 @@
 import PyPDF2
 from docx import Document
 
-sys_content = " You are a read-file master. You will receive a document and reply my requirements in Chinese. Instruction:  Compose a comprehensive reply to the query using the search results given. Cite each reference using [ Page Number] notation (every result has this number at the beginning). Citation should be done at the end of each sentence. If the search results mention multiple subjects with the same name, create separate answers for each. Make sure the answer is correct and don't output false content. Only answer what is asked. The answer should be short and concise. Answer step-by-step and reply in markdown format."
+sys_content = " You are a read-file master. You will receive a document and reply my requirements in Chinese. Instruction: Compose a comprehensive reply to the query using the search results given. Cite each reference using [ Page Number] notation (every result has this number at the beginning). Citation should be done at the end of each sentence. If the search results mention multiple subjects with the same name, create separate answers for each. Make sure the answer is correct and don't output false content. Only answer what is asked. The answer should be short and concise. Answer step-by-step and reply in markdown format."
 end_file_message = "Document sent. Please reply in Chinese and format your response using markdown based on the content. My first requirement is'Summarize and main content of the article.'"
 
 # 文件收集
@@ -48,11 +48,9 @@ def pdf_transofrm(file,type):
     
     # 读取文件内容
     
-    dialogue_history = [{'role':'system','content':sys_content},]
-    # print(f"\n\n本文一共有{len(content)}字\n\n")
+    dialogue_history = []
     contents = ContentSplit(content,4000) # 分段内容
     pages = len(contents) # 分段数
-    # print(f"\n\n本文一共有{pages}页\n\n")
 
     ## 分段输入
     # start
