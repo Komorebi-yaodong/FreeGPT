@@ -1,19 +1,17 @@
-# Chat with file(openai + gpt4free + streamlit by python)
+# Free GPT(gpt4free + streamlit)
 
-## now
+## how to use
 
-support:`pdf`,`docx`
-
-## way
-
-split pdf and turn to markdown, then send to openai api, get response
-
-## use
 ```
 pip install -r requirements.txt
-streamlit run app.py
+streamlit run streamlit_app.py
 ```
 
-## features
-with free api
-use url_base and api-key(no api?`https://github.com/chatanywhere/GPT_API_free.git`)
+## introduce
+
+1. choose the model you want to chat with;
+2. test could help you to find available provider(bold);
+3. providers list would be update by test result;
+4. chat with the model if provider is not void;
+
+> if a provider need to open a new browser windows，it may be added into providers list mistakenly.
