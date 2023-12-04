@@ -5,30 +5,15 @@ from g4f.Provider import ProviderUtils
 from g4f.models import ModelUtils,_all_models
 
 
-
-########################### 一些样式 ###########################
-
-button_style1 = """
-    <style>
-        .stButton>button {
-            font-size: 12px;
-            padding: 8px 35px;
-        }
-    </style>
-"""
-st.markdown(button_style1, unsafe_allow_html=True)
-########################### 初始参数 ###########################
 if "models_list" not in st.session_state:
     st.session_state._models_str = _all_models
     st.session_state.models_list = ModelUtils.convert
 if "providers_list" not in st.session_state:
     st.session_state._providers_str = list(ProviderUtils.convert.keys())
-
     st.session_state.providers_list = ProviderUtils.convert
-
 if "model" not in st.session_state:
     st.session_state["model"] = st.session_state._models_str[0]
-    st.session_state["temperature"] = 1.0
+    st.session_state["temperature"] = 0.8
     st.session_state["max_tokens"] = 2000
     st.session_state["memory"] = True
     st.session_state["g4fmodel"] = st.session_state.models_list[st.session_state["model"]]
@@ -42,12 +27,18 @@ if "sys_prompt" not in st.session_state:
     st.session_state["sys_prompt"] = ""
 if "dialogue_history" not in st.session_state:
     st.session_state["dialogue_history"] = []
+if "introduce" not in st.session_state:
+    with open("./README.md","r",encoding="utf-8") as f:
+        st.session_state.introduce = f.read()
 
 ########################### function ###########################
+    
+
 header =  st.empty()
 header.write("<h2> 🤖 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
 show_talk = st.container()
 show_test = st.container()
+
 
 def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature,max_tokens=st.session_state.max_tokens):
     # 将当前消息添加到对话历史中
@@ -100,14 +91,23 @@ with st.sidebar:
 
     # 设置
     with st.container():
+        if st.button('New Chat',use_container_width=True):
+            if st.session_state["sys_prompt"] == "":
+                st.session_state["dialogue_history"] = []
+            else:
+                st.session_state.dialogue_history = [{'role':'system','content':st.session_state.sys_prompt},]
+            st.session_state["session"] = []
+            print(st.session_state["dialogue_history"])
+
+    with st.container():
         with st.expander("**Settings**"):
             st.session_state["model"] = st.selectbox('models', st.session_state._models_str)
             provider = st.selectbox('provider', st.session_state.providers_available)
+            max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
             memory = st.toggle('memory', st.session_state["memory"])
             st.session_state["stream"] =  st.toggle('stream', ["True","False"])
             temperature = st.slider('temperature', 0.0, 2.0, st.session_state["temperature"])
-            max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
-            if st.button('Save'):
+            if st.button('Save',use_container_width=True):
                 st.session_state.g4fmodel = st.session_state.models_list[st.session_state["model"]]
                 st.session_state.provider = st.session_state.providers_list[provider]
                 st.session_state["temperature"] =temperature
@@ -119,18 +119,11 @@ with st.sidebar:
 
     with st.container():
         sys_prompt = st.text_input('**System Prompt**', st.session_state["sys_prompt"])
-        if st.button('New Chat'):
-            st.session_state["sys_prompt"] = sys_prompt.strip()
-            if st.session_state["sys_prompt"] == "":
-                st.session_state["dialogue_history"] = []
-            else:
-                st.session_state.dialogue_history = [{'role':'system','content':st.session_state.sys_prompt},]
-            st.session_state["session"] = []  
+        st.session_state["sys_prompt"] = sys_prompt.strip()
             
 
     with st.container():
         st.session_state["chat"] = st.toggle('🔍 | 🤖', [True,False])
-
 
 
 ########################### 聊天展示区 ###########################
@@ -141,6 +134,7 @@ if st.session_state["chat"]:
     if prompt:
         message = {"role":"user","content":prompt}
         chatg4f(message,st.session_state["dialogue_history"],st.session_state["session"])
+
 else:
     with show_test:
         async def run_provider(content,model,provider: g4f.Provider.BaseProvider):
@@ -174,9 +168,6 @@ else:
     header.write("<h2> 🔍 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
     content = st.chat_input("Send a test message to search avalible providers")
     if content:
-        st.session_state.providers_available = []
-        test_provider(content,st.session_state.g4fmodel)
-        
-
-        
-        
+        with st.spinner('🕵️‍♂️Search available providers...'):
+            st.session_state.providers_available = []
+            test_provider(content,st.session_state.g4fmodel)
