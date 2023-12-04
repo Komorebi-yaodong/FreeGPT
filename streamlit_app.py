@@ -2,7 +2,6 @@ import asyncio
 import streamlit as st
 import g4f
 from g4f.Provider import ProviderUtils
-
 from g4f.models import ModelUtils,_all_models
 
 
@@ -30,7 +29,7 @@ if "providers_list" not in st.session_state:
 if "model" not in st.session_state:
     st.session_state["model"] = st.session_state._models_str[0]
     st.session_state["temperature"] = 1.0
-    st.session_state["max_tokens"] = 1000
+    st.session_state["max_tokens"] = 2000
     st.session_state["memory"] = True
     st.session_state["g4fmodel"] = st.session_state.models_list[st.session_state["model"]]
     st.session_state["provider"] = st.session_state.providers_list[st.session_state._providers_str[0]]
@@ -40,13 +39,13 @@ if "model" not in st.session_state:
 if "session" not in st.session_state:
     st.session_state["session"] = []
 if "sys_prompt" not in st.session_state:
-    st.session_state["sys_prompt"] = "You are an AI assistant."
+    st.session_state["sys_prompt"] = ""
 if "dialogue_history" not in st.session_state:
-    st.session_state["dialogue_history"] = [{'role':'system','content':st.session_state.sys_prompt},]
+    st.session_state["dialogue_history"] = []
 
 ########################### function ###########################
 header =  st.empty()
-header.write("<h2> Chat-"+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
+header.write("<h2> 🤖 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
 show_talk = st.container()
 show_test = st.container()
 
@@ -101,7 +100,7 @@ with st.sidebar:
 
     # 设置
     with st.container():
-        with st.expander("Settings"):
+        with st.expander("**Settings**"):
             st.session_state["model"] = st.selectbox('models', st.session_state._models_str)
             provider = st.selectbox('provider', st.session_state.providers_available)
             memory = st.toggle('memory', st.session_state["memory"])
@@ -115,24 +114,23 @@ with st.sidebar:
                 st.session_state["memory"] =memory
                 st.session_state["max_tokens"] = max_tokens
                 st.balloons()
+                show()
 
 
     with st.container():
-        sys_prompt = st.text_input('sys_prompt', st.session_state["sys_prompt"])
-        if st.button('Submit'):
-            st.session_state["sys_prompt"] = sys_prompt
-            st.session_state["dialogue_history"].append({'role':'system','content':st.session_state["sys_prompt"]})
-
-    with st.container():
-        st.session_state["chat"] = st.toggle('Test | Chat', [True,False])
-
-            
-    with st.container():
-        if st.button('Clear'):
-            # 处理新文件
-            st.session_state.dialogue_history = [{'role':'system','content':st.session_state.sys_prompt},]
-            # 重置会话
+        sys_prompt = st.text_input('**System Prompt**', st.session_state["sys_prompt"])
+        if st.button('New Chat'):
+            st.session_state["sys_prompt"] = sys_prompt.strip()
+            if st.session_state["sys_prompt"] == "":
+                st.session_state["dialogue_history"] = []
+            else:
+                st.session_state.dialogue_history = [{'role':'system','content':st.session_state.sys_prompt},]
             st.session_state["session"] = []  
+            
+
+    with st.container():
+        st.session_state["chat"] = st.toggle('🔍 | 🤖', [True,False])
+
 
 
 ########################### 聊天展示区 ###########################
@@ -152,14 +150,17 @@ else:
                     messages=[{"role": "user", "content": content}],
                     provider=provider,
                 )
-                st.session_state.providers_available.append(provider.__name__)
-                show_test.write("***")
-                show_test.write(f"**{provider.__name__}:** {response}")
-                # print(f"{provider.__name__}:", response)
+                if response != "":
+                    st.session_state.providers_available.append(provider.__name__)
+                    show_test.write("***")
+                    show_test.write(f"**{provider.__name__}:**")
+                    show_test.write(response)
+                print(f"{provider.__name__}:", response)
             except Exception as e:
-                show_test.write("***")
-                show_test.write(f"*{provider.__name__}*: {e}")
+                # show_test.write("***")
+                # show_test.write(f"*{provider.__name__}*: {e}")
                 # print(f"{provider.__name__}:", e)
+                pass
                 
         async def run_all(content,model):
             calls = [
@@ -170,8 +171,8 @@ else:
         def test_provider(content,model):
             asyncio.run(run_all(content,model))
             
-    header.write("<h2> Test-"+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
-    content = st.chat_input("Send a test message")
+    header.write("<h2> 🔍 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
+    content = st.chat_input("Send a test message to search avalible providers")
     if content:
         st.session_state.providers_available = []
         test_provider(content,st.session_state.g4fmodel)
