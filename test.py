@@ -1,13 +1,63 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from g4f.models import ModelUtils,_all_models
 from g4f.Provider import ProviderUtils
+from bs4 import BeautifulSoup
 from docx import Document
 import streamlit as st
+import requests
 import asyncio
 import PyPDF2
 import g4f
+import re
 
 
+class GoogleSearchExtractor:
+    def __init__(self,api_key,cse_id,num_link=3,timeout_seconds=10) -> None:
+        self.api_key = api_key
+        self.cse_id = cse_id
+        self.num_links = num_link
+        self.timeout_seconds = timeout_seconds
+
+    def google_search(self,query):
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {
+            "q":query,
+            "key":self.api_key,
+            "cx":self.cse_id,
+        }
+        resopnse = requests.get(url,params=params)
+        return resopnse.json()
+    
+    def clean_text(self,text):
+        return re.sub(r'\s+', ' ', text).strip()
+    
+    def extract_contents(self,query):
+        results = self.google_search(query)
+        inner = []
+        for item in results["items"][:self.num_links]:
+            url = item['link']
+
+            try:
+                response = requests.get(url, timeout=self.timeout_seconds)
+                if response.status_code == 200:
+                    encoding = response.encoding if 'charset' in response.headers.get('content-type', '').lower() else None
+
+                    # 使用BeautifulSoup解析HTML
+                    soup = BeautifulSoup(response.content, 'html.parser', from_encoding=encoding)
+
+                    # 使用get_text()方法提取所有文本内容
+                    text_content = soup.get_text()
+                    # 清理文本
+                    cleaned_text = self.clean_text(text_content)
+                    inner.append(cleaned_text)
+                    # 打印提取的文本内容
+                else:
+                    print(f"无法访问网页：{url}")
+            except requests.Timeout:
+                print(f"请求超时，超过了{self.timeout_seconds}秒的等待时间。链接：{url}")
+
+        return inner
+    
 
 if "models_list" not in st.session_state:
     st.session_state._models_str = _all_models
@@ -34,6 +84,8 @@ if "dialogue_history" not in st.session_state:
 if "introduce" not in st.session_state:
     with open("./README.md","r",encoding="utf-8") as f:
         st.session_state.introduce = f.read()
+if "web_catcher" not in st.session_state:
+    st.session_state.web_catcher = GoogleSearchExtractor(st.secrets.google_key,st.secrets.cse_id)
 
 ########################### element ###########################
 
@@ -119,11 +171,7 @@ def get_file_reader(file,type):
     return dialogue_history
 
 
-def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature,max_tokens=st.session_state.max_tokens):
-    # 将当前消息添加到对话历史中
-    session.append(message)
-    dialogue_history.append(message)
-    # 发送请求给 OpenAI GPT
+def gpt_resopnse(model,provider,dialogue_history,temperature,max_tokens,stream):
     if stream:
         response = g4f.ChatCompletion.create(
             model=model,
@@ -141,6 +189,43 @@ def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],m
             temperature=temperature, # 控制模型输出的随机程度
             max_tokens=max_tokens,  # 控制生成回复的最大长度
         )
+    return response
+
+def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature,max_tokens=st.session_state.max_tokens):
+    # 将当前消息添加到对话历史中
+    session.append(message)
+    dialogue_history.append(message)
+    # 发送请求给 OpenAI GPT
+    response = gpt_resopnse(model,provider,dialogue_history,temperature,max_tokens,stream)
+    show()
+    reply = {'role':'assistant','content':""}
+    with show_talk.chat_message(reply['role']):
+        line = st.empty()
+        for message in response:
+            reply['content'] += message
+            line.empty()
+            line.write(reply['content'])
+    session.append(reply)
+    if not st.session_state["memory"]:
+        dialogue_history.pop()
+    else:
+        dialogue_history.append(reply)
+
+
+def chatg4f_web(prompt,dialogue_history,session,stream=st.session_state["stream"],model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature,max_tokens=st.session_state.max_tokens):
+    # 整理联网消息
+    tmp_history = [{'role':'system','content':"你现在是一个关键词提取机器人,接下来用户会给你一段文本,这段文本是用户输入给你的内容,这段内容可能会有一些混淆的信息,你要做的就是提取里面可能需要联网才能查询到的信息出来,并且返回搜索使用的关键词，你的回复必须是关键词,回复也只能有关键词，格式为'{key1} {key2} {key3} ...'"}]
+    tmp_history.append({'role':'user','content':prompt})
+    web_prompt = gpt_resopnse(model,provider,tmp_history,temperature,max_tokens,False)
+    print(web_prompt)
+    inner = st.session_state.web_catcher.extract_contents(web_prompt)[:3000]
+    real_prompt = f"""user询问问题如下:\n{prompt}。\n\n网络搜索结果如下:\n{inner}\n\n请你结合网络搜索结果回答用户的问题"""
+    print(real_prompt)
+    # 将当前消息添加到对话历史中
+    dialogue_history.append({"role":"user","content":real_prompt})
+    session.append({"role":"system","content":prompt})
+    # 发送请求给 OpenAI GPT
+    response = gpt_resopnse(model,provider,dialogue_history,temperature,max_tokens,stream)
     show()
     reply = {'role':'assistant','content':""}
     with show_talk.chat_message(reply['role']):
@@ -208,7 +293,7 @@ with st.sidebar:
 
     # 模式
     with st.container():
-        st.session_state["mode"] = st.radio("Choose the mode",["**🚀Introduce**","**🤖Chat**","**🕵️‍♂️Test**"])
+        st.session_state["mode"] = st.radio("Choose the mode",["**🚀Introduce**","**🤖Chat**","**🌐Chat-web**","**🕵️‍♂️Test**"])
 
 
 ########################### 聊天展示区 ###########################
@@ -256,7 +341,12 @@ elif st.session_state["mode"] == "**🕵️‍♂️Test**":
         with st.spinner('🕵️‍♂️Search available providers...'):
             st.session_state.providers_available = []
             test_provider(test_prompt,st.session_state.g4fmodel)
-
+elif st.session_state.mode == "**🌐Chat-web**":
+    # 用户输入区域
+    header.write("<h2> 🌐 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
+    user_prompt = st.chat_input("Send a message")
+    if user_prompt:
+        chatg4f_web(user_prompt,st.session_state["dialogue_history"],st.session_state["session"])
 else:
     with show_introduce:
         header.write("<h2> 🚀 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
