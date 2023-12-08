@@ -1,11 +1,16 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from g4f.models import ModelUtils,_all_models
+from streamlit.components.v1 import html
 from g4f.Provider import ProviderUtils
 from docx import Document
 import streamlit as st
+from gtts import gTTS
 import asyncio
+import base64
+import langid
 import PyPDF2
 import g4f
+import io
 
 
 
@@ -29,6 +34,8 @@ if "model" not in st.session_state:
     st.session_state["providers_available"] = st.session_state._providers_str
     st.session_state["stream"] = True
     st.session_state["mode"] = "**🚀introudce**"
+    st.session_state["speech"] = True
+    st.session_state["talk_content"] = io.BytesIO()
 if "session" not in st.session_state:
     st.session_state["session"] = []
 if "dialogue_history" not in st.session_state:
@@ -44,6 +51,7 @@ header =  st.empty()
 header.write("<h2> 🤖 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
 show_talk = st.container()
 show_introduce = st.container()
+show_speech = st.container()
 
 ########################### function ###########################
 
@@ -155,6 +163,8 @@ def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],m
         dialogue_history.pop()
     else:
         dialogue_history.append(reply)
+    if st.session_state["speech"] == True:
+        st.session_state.talk_content = mytts(reply["content"])
 
 
 def show():
@@ -190,6 +200,31 @@ async def run_all(content,model):
 def test_provider(content,model):
     asyncio.run(run_all(content,model))
 
+def mytts(text):
+
+    def autoplay_audio(audio_data:io.BytesIO):
+        data = audio_data.getvalue()
+        b64 = base64.b64encode(data).decode()
+        md = f"""
+                <audio controls autoplay="true" id="myAudio">
+                    <source src="data:audio/ogg;base64,{b64}" type="audio/ogg">
+                </audio>
+                <script>
+                    var audio = document.getElementById("myAudio");
+                    audio.playbackRate = 1.5; 
+                </script>
+                """
+        html(md)
+
+    lang,conf = langid.classify(text)
+    if lang == "zh":
+        tts = gTTS(text=text,lang=lang)
+    else:
+        tts = gTTS(text=text,lang='en')
+    speach_BytesIO = io.BytesIO()
+    tts.write_to_fp(speach_BytesIO)
+    autoplay_audio(speach_BytesIO)
+
 
 ########################### 侧边栏：设置、测试 ###########################
 
@@ -220,14 +255,17 @@ with st.sidebar:
             st.session_state["model"] = st.selectbox('models', sorted(st.session_state._models_str))
             provider = st.selectbox('provider', sorted(st.session_state.providers_available))
             max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
+            speech = st.toggle('speech', st.session_state.speech)
             memory = st.toggle('memory', st.session_state["memory"])
-            st.session_state["stream"] =  st.toggle('stream', ["True","False"])
+            stream =  st.toggle('stream', ["True","False"])
             temperature = st.slider('temperature', 0.0, 2.0, st.session_state["temperature"])
             if st.session_state.get('Save'):
                 st.session_state.g4fmodel = st.session_state.models_list[st.session_state["model"]]
                 st.session_state.provider = st.session_state.providers_list[provider]
                 st.session_state["temperature"] =temperature
+                st.session_state["speech"] =speech
                 st.session_state["memory"] =memory
+                st.session_state["stream"] =stream
                 st.session_state["max_tokens"] = max_tokens
                 st.balloons()
                 show()

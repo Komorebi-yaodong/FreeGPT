@@ -1,4 +1,6 @@
 PyPDF2
+gtts
+langid
 python_docx
 langchain
 streamlit
