@@ -13,8 +13,12 @@ if "models_list" not in st.session_state:
     st.session_state._models_str = _all_models
     st.session_state.models_list = ModelUtils.convert
 if "providers_list" not in st.session_state:
+    st.session_state["black_list"] = ["GptTalkRu","Hashnode","Liaobots","Phind","Bing","You"]
     st.session_state._providers_str = list(ProviderUtils.convert.keys())
     st.session_state.providers_list = ProviderUtils.convert
+    for black in st.session_state["black_list"]:
+        if black in st.session_state._providers_str:
+            del st.session_state.providers_list[black]
 if "model" not in st.session_state:
     st.session_state["model"] = st.session_state._models_str[0]
     st.session_state["temperature"] = 0.8
@@ -27,8 +31,6 @@ if "model" not in st.session_state:
     st.session_state["mode"] = "**🚀introudce**"
 if "session" not in st.session_state:
     st.session_state["session"] = []
-if "sys_prompt" not in st.session_state:
-    st.session_state["sys_prompt"] = ""
 if "dialogue_history" not in st.session_state:
     st.session_state["dialogue_history"] = []
 if "introduce" not in st.session_state:
@@ -41,7 +43,6 @@ if "introduce" not in st.session_state:
 header =  st.empty()
 header.write("<h2> 🤖 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
 show_talk = st.container()
-show_test = st.container()
 show_introduce = st.container()
 
 ########################### function ###########################
@@ -96,9 +97,9 @@ def get_splitted_text(text):
 
 @st.cache_data
 def get_file_reader(file,type):
-    sys_content = "You are a file reading bot. Next, the user will send an file. After reading, you should fully understand the content of the file and be able to analyze, interpret, and respond to questions related to the file in both Chinese and Markdown formats. Answer step-by-step."
+    start_content = "You are a file reading bot. Next, the user will send a file. After reading, you should fully understand the content of the file and be able to analyze, interpret, and respond to questions related to the file in both Chinese and Markdown formats. Answer step-by-step."
     end_file_message = "File sent. Next, please reply in Chinese and format your response using markdown based on the content.'"
-    dialogue_history = [{'role':'system','content':sys_content},]
+    dialogue_history = [{'role':'user','content':start_content},]
     
     # 文本提取并拆分
     text = get_text(file,type)
@@ -162,6 +163,34 @@ def show():
             st.write(section['content'],unsafe_allow_html=True)
 
 
+async def run_provider(content,model,provider: g4f.Provider.BaseProvider):
+    try:
+        response = await g4f.ChatCompletion.create_async(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            provider=provider,
+            timeout=10,
+        )
+        if response != "" and provider.__name__ not in st.session_state.black_list:
+            st.session_state.providers_available.append(provider.__name__)
+            st.info(provider.__name__, icon="✅")
+            print(provider.__name__,":",response)
+        # print(f"{provider.__name__}:", response)
+    except Exception as e:
+        # print(f"{provider.__name__}:", e)
+        pass
+        
+
+async def run_all(content,model):
+    calls = [
+        run_provider(content,model,provider) for provider in st.session_state.providers_list.values()
+    ]
+    await asyncio.gather(*calls)
+
+def test_provider(content,model):
+    asyncio.run(run_all(content,model))
+
+
 ########################### 侧边栏：设置、测试 ###########################
 
 
@@ -170,23 +199,31 @@ with st.sidebar:
 
     # 新的开始
     with st.container():
-        if st.button('New Chat',use_container_width=True):
-            if st.session_state["sys_prompt"] == "":
-                st.session_state["dialogue_history"] = []
-            else:
-                st.session_state.dialogue_history = [{'role':'system','content':st.session_state.sys_prompt},]
+        if st.session_state.get('🗨️ New Chat'):
+            st.session_state.dialogue_history = []
             st.session_state["session"] = []
+        st.button('🗨️ New Chat',use_container_width=True,type='primary',key="🗨️ New Chat")
+
+
+    with st.container():
+        if st.button("🕵️‍♂️Search Providers",use_container_width=True,key="🕵️‍♂️Search Providers"):
+            with show_talk:
+                st.session_state.providers_available = []
+                test_prompt = "请回复“收到”两字，不要有任何多余解释和字符。"
+                test_provider(test_prompt,st.session_state.g4fmodel)
+        
+
 
     # 设置
     with st.container():
         with st.expander("**Settings**"):
-            st.session_state["model"] = st.selectbox('models', st.session_state._models_str)
-            provider = st.selectbox('provider', st.session_state.providers_available)
+            st.session_state["model"] = st.selectbox('models', sorted(st.session_state._models_str))
+            provider = st.selectbox('provider', sorted(st.session_state.providers_available))
             max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
             memory = st.toggle('memory', st.session_state["memory"])
             st.session_state["stream"] =  st.toggle('stream', ["True","False"])
             temperature = st.slider('temperature', 0.0, 2.0, st.session_state["temperature"])
-            if st.button('Save',use_container_width=True):
+            if st.session_state.get('Save'):
                 st.session_state.g4fmodel = st.session_state.models_list[st.session_state["model"]]
                 st.session_state.provider = st.session_state.providers_list[provider]
                 st.session_state["temperature"] =temperature
@@ -194,21 +231,21 @@ with st.sidebar:
                 st.session_state["max_tokens"] = max_tokens
                 st.balloons()
                 show()
+            st.button('Save',use_container_width=True,key="Save")
 
-    # 系统提示词
-    with st.container():
-        sys_prompt = st.text_input('**System Prompt**', st.session_state["sys_prompt"])
-        st.session_state["sys_prompt"] = sys_prompt.strip()
     
     with st.container():
         new_file = st.file_uploader("上传短文件")
-        if st.button('Upload File📄',use_container_width=True) and new_file is not None:
+        if st.session_state.get('Upload File📄') and new_file is not None:
                 file_name,file_type = collect_file(new_file)
                 st.session_state.dialogue_history = get_file_reader(new_file,file_type)
+        st.button('Upload File📄',use_container_width=True,key='Upload File📄')
 
     # 模式
     with st.container():
-        st.session_state["mode"] = st.radio("Choose the mode",["**🚀Introduce**","**🤖Chat**","**🕵️‍♂️Test**"])
+        st.session_state["mode"] = st.radio("Choose the mode",["**🤖Chat**","**🚀Introduce**"])
+
+
 
 
 ########################### 聊天展示区 ###########################
@@ -220,43 +257,6 @@ if st.session_state["mode"] == "**🤖Chat**":
     if user_prompt:
         message = {"role":"user","content":user_prompt}
         chatg4f(message,st.session_state["dialogue_history"],st.session_state["session"])
-elif st.session_state["mode"] == "**🕵️‍♂️Test**":
-    with show_test:
-        async def run_provider(content,model,provider: g4f.Provider.BaseProvider):
-            try:
-                response = await g4f.ChatCompletion.create_async(
-                    model=model,
-                    messages=[{"role": "user", "content": content}],
-                    provider=provider,
-                )
-                if response != "":
-                    st.session_state.providers_available.append(provider.__name__)
-                    show_test.write("***")
-                    show_test.write(f"**{provider.__name__}:**")
-                    show_test.write(response)
-                # print(f"{provider.__name__}:", response)
-            except Exception as e:
-                # show_test.write("***")
-                # show_test.write(f"*{provider.__name__}*: {e}")
-                # print(f"{provider.__name__}:", e)
-                pass
-                
-        async def run_all(content,model):
-            calls = [
-                run_provider(content,model,provider) for provider in st.session_state.providers_list.values()
-            ]
-            await asyncio.gather(*calls)
-
-        def test_provider(content,model):
-            asyncio.run(run_all(content,model))
-            
-    header.write("<h2> 🕵️‍♂️ "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
-    test_prompt = st.chat_input("Send a test message to search avalible providers")
-    if test_prompt:
-        with st.spinner('🕵️‍♂️Search available providers...'):
-            st.session_state.providers_available = []
-            test_provider(test_prompt,st.session_state.g4fmodel)
-
 else:
     with show_introduce:
         header.write("<h2> 🚀 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)

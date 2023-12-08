@@ -10,7 +10,7 @@ streamlit run streamlit_app.py
 ## introduce
 
 1. choose the model you want to chat with;
-2. 🕵️‍♂️(test) could help you to find available provider(bold);
+2. 🕵️‍♂️(Search Providers) could help you to find available provider(bold);
 3. providers list would be update by test result;
 4. chat with the model if provider is not void;
 

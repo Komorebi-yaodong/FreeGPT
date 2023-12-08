@@ -2,4 +2,4 @@ PyPDF2
 python_docx
 langchain
 streamlit
-g4f
+g4f==0.1.9.2
