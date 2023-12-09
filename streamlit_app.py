@@ -1,7 +1,9 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from streamlit_mic_recorder import mic_recorder
 from g4f.models import ModelUtils,_all_models
 from streamlit.components.v1 import html
 from g4f.Provider import ProviderUtils
+import speech_recognition as sr
 from docx import Document
 import streamlit as st
 from gtts import gTTS
@@ -17,17 +19,14 @@ import io
 if "models_list" not in st.session_state:
     st.session_state._models_str = _all_models
     st.session_state.models_list = ModelUtils.convert
-if "providers_list" not in st.session_state:
     st.session_state["black_list"] = ["GptTalkRu","Hashnode","Liaobots","Phind","Bing","You"]
     st.session_state._providers_str = list(ProviderUtils.convert.keys())
     st.session_state.providers_list = ProviderUtils.convert
     for black in st.session_state["black_list"]:
         if black in st.session_state._providers_str:
             del st.session_state.providers_list[black]
-if "model" not in st.session_state:
     st.session_state["model"] = st.session_state._models_str[0]
     st.session_state["temperature"] = 0.8
-    st.session_state["max_tokens"] = 2000
     st.session_state["memory"] = True
     st.session_state["g4fmodel"] = st.session_state.models_list[st.session_state["model"]]
     st.session_state["provider"] = st.session_state.providers_list[st.session_state._providers_str[0]]
@@ -36,11 +35,11 @@ if "model" not in st.session_state:
     st.session_state["mode"] = "**🚀introudce**"
     st.session_state["speech"] = True
     st.session_state["talk_content"] = io.BytesIO()
-if "session" not in st.session_state:
+    st.session_state["speech_language"] = "zh"
+    st.session_state["audio_prompt"] = None
+    st.session_state.sr = sr.Recognizer()
     st.session_state["session"] = []
-if "dialogue_history" not in st.session_state:
     st.session_state["dialogue_history"] = []
-if "introduce" not in st.session_state:
     with open("./README.md","r",encoding="utf-8") as f:
         st.session_state.introduce = f.read()
 
@@ -50,8 +49,11 @@ if "introduce" not in st.session_state:
 header =  st.empty()
 header.write("<h2> 🤖 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
 show_talk = st.container()
-show_introduce = st.container()
-show_speech = st.container()
+show_introduce = st.container(border=True)
+
+show_mine_speech = st.empty()
+show_ai_speech = st.empty()
+
 
 ########################### function ###########################
 
@@ -89,7 +91,8 @@ def get_text(file,type):
     elif type == 'txt' or type == 'md' or type == 'py' or type == 'c' or type == 'cpp' or type == 'js':
         text = file.getvalue().decode("utf-8")
     else:
-        print("The file type is not supported.(only pdf, docx, txt, md supported)")
+        st.error("The file type is not supported.(only pdf, docx, txt, md supported)")
+        # print("The file type is not supported.(only pdf, docx, txt, md supported)")
         return []
     
     return text
@@ -105,9 +108,10 @@ def get_splitted_text(text):
 
 @st.cache_data
 def get_file_reader(file,type):
+    assistant_reply = {'role':'assistant','content':"收到"}
     start_content = "You are a file reading bot. Next, the user will send a file. After reading, you should fully understand the content of the file and be able to analyze, interpret, and respond to questions related to the file in both Chinese and Markdown formats. Answer step-by-step."
     end_file_message = "File sent. Next, please reply in Chinese and format your response using markdown based on the content.'"
-    dialogue_history = [{'role':'user','content':start_content},]
+    dialogue_history = [{'role':'user','content':start_content},assistant_reply]
     
     # 文本提取并拆分
     text = get_text(file,type)
@@ -115,20 +119,27 @@ def get_file_reader(file,type):
     pages = len(text_list)
     start_message = f"我现在会将文章的内容分 {len(text_list)} 部分发送给你。请确保你已经准备好接收，接收到文章发送完毕的指令后，请准备回答我的问题。"
     dialogue_history.append({'role':'user','content':start_message})
+    dialogue_history.append(assistant_reply)
 
     # 分段输入
     for i in range(pages):
         text_message = {'role':'user','content':text_list[i]}
         dialogue_history.append(text_message)
+        dialogue_history.append(assistant_reply)
     
     # 结束文本输入
     end_message = {'role':'user','content':end_file_message}
     dialogue_history.append(end_message)
+    dialogue_history.append({'role':'assistant','content':"我已阅读完文章"})
 
     return dialogue_history
 
 
-def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature,max_tokens=st.session_state.max_tokens):
+def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature):
+    if len(dialogue_history) != 0 and len(dialogue_history) != 0:
+        if dialogue_history[-1]["role"] == "user":
+            dialogue_history.pop()
+            session.pop
     # 将当前消息添加到对话历史中
     session.append(message)
     dialogue_history.append(message)
@@ -139,7 +150,6 @@ def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],m
             provider = provider,
             messages=dialogue_history,
             temperature=temperature, # 控制模型输出的随机程度
-            max_tokens=max_tokens,  # 控制生成回复的最大长度
             stream=stream
         )
     else:
@@ -148,7 +158,6 @@ def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],m
             provider = provider,
             messages=dialogue_history,
             temperature=temperature, # 控制模型输出的随机程度
-            max_tokens=max_tokens,  # 控制生成回复的最大长度
         )
     show()
     reply = {'role':'assistant','content':""}
@@ -184,7 +193,6 @@ async def run_provider(content,model,provider: g4f.Provider.BaseProvider):
         if response != "" and provider.__name__ not in st.session_state.black_list:
             st.session_state.providers_available.append(provider.__name__)
             st.info(provider.__name__, icon="✅")
-            print(provider.__name__,":",response)
         # print(f"{provider.__name__}:", response)
     except Exception as e:
         # print(f"{provider.__name__}:", e)
@@ -206,7 +214,7 @@ def mytts(text):
         data = audio_data.getvalue()
         b64 = base64.b64encode(data).decode()
         md = f"""
-                <audio controls autoplay="true" id="myAudio">
+                <audio controls autoplay="true" id="myAudio" style="width: 100%;">
                     <source src="data:audio/ogg;base64,{b64}" type="audio/ogg">
                 </audio>
                 <script>
@@ -217,14 +225,43 @@ def mytts(text):
         html(md)
 
     lang,conf = langid.classify(text)
-    if lang == "zh":
-        tts = gTTS(text=text,lang=lang)
-    else:
-        tts = gTTS(text=text,lang='en')
+    tts = gTTS(text=text,lang=lang)
     speach_BytesIO = io.BytesIO()
     tts.write_to_fp(speach_BytesIO)
     autoplay_audio(speach_BytesIO)
+    st.write(lang,conf)
 
+
+def talkg4f(message,dialogue_history,session,model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature):
+    if len(dialogue_history) != 0 and len(dialogue_history) != 0:
+        if dialogue_history[-1]["role"] == "user":
+            dialogue_history.pop()
+            session.pop()
+    # 将当前消息添加到对话历史中
+    session.append(message)
+    dialogue_history.append(message)
+    # 发送请求给 OpenAI GPT
+    response = g4f.ChatCompletion.create(
+        model=model,
+        provider = provider,
+        messages=dialogue_history,
+        temperature=temperature, # 控制模型输出的随机程度
+    )
+    reply = {'role':'assistant','content':response}
+    session.append(reply)
+    if not st.session_state["memory"]:
+        dialogue_history.pop()
+    else:
+        dialogue_history.append(reply)
+    
+    st.session_state.talk_content = mytts(reply["content"])
+
+
+@st.cache_data
+def audio2text(audio_prompt,language):
+    audio_data = sr.AudioData(audio_prompt['bytes'],audio_prompt['sample_rate'],audio_prompt['sample_width'])
+    output = st.session_state.sr.recognize_google(audio_data,language=language)
+    return output
 
 ########################### 侧边栏：设置、测试 ###########################
 
@@ -234,10 +271,10 @@ with st.sidebar:
 
     # 新的开始
     with st.container():
-        if st.session_state.get('🗨️ New Chat'):
+        if st.session_state.get('🆕 New Chat'):
             st.session_state.dialogue_history = []
             st.session_state["session"] = []
-        st.button('🗨️ New Chat',use_container_width=True,type='primary',key="🗨️ New Chat")
+        st.button('🆕 New Chat',use_container_width=True,type='primary',key="🆕 New Chat")
 
 
     with st.container():
@@ -254,7 +291,6 @@ with st.sidebar:
         with st.expander("**Settings**"):
             st.session_state["model"] = st.selectbox('models', sorted(st.session_state._models_str))
             provider = st.selectbox('provider', sorted(st.session_state.providers_available))
-            max_tokens = st.text_input('max_tokens', st.session_state["max_tokens"])
             speech = st.toggle('speech', st.session_state.speech)
             memory = st.toggle('memory', st.session_state["memory"])
             stream =  st.toggle('stream', ["True","False"])
@@ -262,13 +298,13 @@ with st.sidebar:
             if st.session_state.get('Save'):
                 st.session_state.g4fmodel = st.session_state.models_list[st.session_state["model"]]
                 st.session_state.provider = st.session_state.providers_list[provider]
-                st.session_state["temperature"] =temperature
-                st.session_state["speech"] =speech
-                st.session_state["memory"] =memory
-                st.session_state["stream"] =stream
-                st.session_state["max_tokens"] = max_tokens
+                st.session_state.temperature =temperature
+                st.session_state.speech =speech
+                st.session_state.memory =memory
+                st.session_state.stream =stream
                 st.balloons()
-                show()
+                if st.session_state.mode == "**🤖Chat**":
+                    show()
             st.button('Save',use_container_width=True,key="Save")
 
     
@@ -281,7 +317,7 @@ with st.sidebar:
 
     # 模式
     with st.container():
-        st.session_state["mode"] = st.radio("Choose the mode",["**🤖Chat**","**🚀Introduce**"])
+        st.session_state["mode"] = st.radio("Choose the mode",["**🤖Chat**","**💬Talk**","**🚀Introduce**"])
 
 
 
@@ -295,6 +331,29 @@ if st.session_state["mode"] == "**🤖Chat**":
     if user_prompt:
         message = {"role":"user","content":user_prompt}
         chatg4f(message,st.session_state["dialogue_history"],st.session_state["session"])
+elif st.session_state["mode"] == "**💬Talk**":
+    header.write("<h2> 💬 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
+
+    show_mine_speech = st.container()
+    show_ai_speech = st.container()
+
+    with show_mine_speech.container():
+        st.session_state.speech_language = st.selectbox("🎙️language",["中文-zh","English-en","日本語-ja","Русский язык-ru","Deutsch-de","Français-fr","중국어-ko"],key="language")
+        st.session_state.audio_prompt = mic_recorder(
+            start_prompt="🎙️开始说话",
+            stop_prompt="🛑结束说话", 
+            just_once=True,
+            use_container_width=True,
+            callback=None,
+            args=(),
+            kwargs={},
+            key=None
+        )
+    with show_ai_speech.container():
+        if st.session_state.audio_prompt:
+            speech_prompt = audio2text(st.session_state.audio_prompt,st.session_state.speech_language[-2:])
+            message = {"role":"user","content":speech_prompt}
+            talkg4f(message,st.session_state["dialogue_history"],st.session_state["session"])
 else:
     with show_introduce:
         header.write("<h2> 🚀 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
