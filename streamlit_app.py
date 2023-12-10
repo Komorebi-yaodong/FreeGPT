@@ -7,7 +7,9 @@ import speech_recognition as sr
 from docx import Document
 import streamlit as st
 from gtts import gTTS
+import requests
 import asyncio
+import hashlib
 import base64
 import langid
 import PyPDF2
@@ -27,7 +29,6 @@ if "models_list" not in st.session_state:
             del st.session_state.providers_list[black]
     st.session_state["model"] = st.session_state._models_str[0]
     st.session_state["temperature"] = 0.8
-    st.session_state["memory"] = True
     st.session_state["g4fmodel"] = st.session_state.models_list[st.session_state["model"]]
     st.session_state["provider"] = st.session_state.providers_list[st.session_state._providers_str[0]]
     st.session_state["providers_available"] = st.session_state._providers_str
@@ -40,6 +41,38 @@ if "models_list" not in st.session_state:
     st.session_state.sr = sr.Recognizer()
     st.session_state["session"] = []
     st.session_state["dialogue_history"] = []
+    st.session_state["huggingfaceToken"] = ""
+    st.session_state["draw_hisgory"] = []
+    st.session_state["draw_model_list"] = {
+        "现实-AbsoluteReality_v1.8.1":"https://api-inference.huggingface.co/models/digiplay/AbsoluteReality_v1.8.1",
+        "现实-Absolute-Reality-1.81":"https://api-inference.huggingface.co/models/Lykon/absolute-reality-1.81",
+        "动漫-AingDiffusion9.2":"https://api-inference.huggingface.co/models/digiplay/AingDiffusion9.2",
+        "现实动漫-BluePencilRealistic_v01":"https://api-inference.huggingface.co/models/digiplay/bluePencilRealistic_v01",
+        "动漫写实-Counterfeit-v2.5":"https://api-inference.huggingface.co/models/gsdf/Counterfeit-V2.5",
+        "动漫写实-Counterfeit-v25-2.5d-tweak":"https://api-inference.huggingface.co/models/digiplay/counterfeitV2525d_tweak",
+        "动漫可爱-Cuteyukimix":"https://api-inference.huggingface.co/models/stablediffusionapi/cuteyukimix",
+        "动漫可爱-Cuteyukimixadorable":"https://api-inference.huggingface.co/models/stablediffusionapi/cuteyukimixadorable",
+        "现实动漫-Dreamshaper-7":"https://api-inference.huggingface.co/models/Lykon/dreamshaper-7",
+        "现实动漫-Dreamshaper_LCM_v7":"https://api-inference.huggingface.co/models/SimianLuo/LCM_Dreamshaper_v7",
+        "动漫3D-DucHaitenDreamWorld":"https://api-inference.huggingface.co/models/DucHaiten/DucHaitenDreamWorld",
+        "现实-EpiCRealism":"https://api-inference.huggingface.co/models/emilianJR/epiCRealism",
+        "现实照片-EpiCPhotoGasm":"https://api-inference.huggingface.co/models/Yntec/epiCPhotoGasm",
+        "动漫丰富-Ether-Blu-Mix-b5":"https://api-inference.huggingface.co/models/tensor-diffusion/Ether-Blu-Mix-V5",
+        "动漫-Flat-2d-Animerge":"https://api-inference.huggingface.co/models/jinaai/flat-2d-animerge",
+        "动漫风景-Genshin-Landscape-Diffusion":"https://api-inference.huggingface.co/models/Apocalypse-19/Genshin-Landscape-Diffusion",
+        "现实照片-Juggernaut-XL-v7":"https://api-inference.huggingface.co/models/stablediffusionapi/juggernaut-xl-v7",
+        "现实风景-Landscape_PhotoReal_v1":"https://api-inference.huggingface.co/models/digiplay/Landscape_PhotoReal_v1",
+        "艺术水墨-MoXin":"https://api-inference.huggingface.co/models/zhyemmmm/MoXin",
+        "现实写实-OnlyRealistic":"https://api-inference.huggingface.co/models/stablediffusionapi/onlyrealistic",
+        "现实-Realistic-Vision-v51":"https://api-inference.huggingface.co/models/stablediffusionapi/realistic-vision-v51",
+        "初始-StableDiffusion-2-1":"https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1",
+        "初始-StableDiffusion-XL-0.9":"https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-0.9",
+        "动漫-TMND-Mix":"https://api-inference.huggingface.co/models/stablediffusionapi/tmnd-mix",
+        "艺术-Zavychromaxl-v3":"https://api-inference.huggingface.co/models/stablediffusionapi/zavychromaxlv3",
+    }
+    st.session_state.negative_prompt = "extra fingers, mutated hands, poorly drawn hands, poorly drawn face, deformed, ugly, bad anatomy, bad proportions, extra limbs, cloned face, double torso, extra arms, extra hands, mangled fingers, missing lips, ugly face, distorted face, extra legs"
+    st.session_state["draw_model"] = "初始-StableDiffusion-2-1"
+    st.session_state["StableDiffusion_URL"] = st.session_state["draw_model_list"][st.session_state["draw_model"]]
     with open("./README.md","r",encoding="utf-8") as f:
         st.session_state.introduce = f.read()
 
@@ -48,14 +81,32 @@ if "models_list" not in st.session_state:
 
 header =  st.empty()
 header.write("<h2> 🤖 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
+# 文字聊天
 show_talk = st.container()
+# 项目介绍
 show_introduce = st.container(border=True)
-
+# 语音对话
 show_mine_speech = st.empty()
 show_ai_speech = st.empty()
+# 文生图
+show_draw = st.container()
+# 其他网站
+show_webs = st.container()
 
 
 ########################### function ###########################
+
+
+@st.cache_data
+def sha256_hash(string):
+    # 创建SHA256哈希对象
+    sha256_hasher = hashlib.sha256()
+    # 将字符串编码为字节流并更新哈希对象
+    sha256_hasher.update(string.encode('utf-8'))
+    # 获取哈希结果
+    hashed_string = sha256_hasher.hexdigest()
+
+    return hashed_string
 
 
 def collect_file(file_upload):
@@ -168,10 +219,7 @@ def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],m
             line.empty()
             line.write(reply['content'])
     session.append(reply)
-    if not st.session_state["memory"]:
-        dialogue_history.pop()
-    else:
-        dialogue_history.append(reply)
+    dialogue_history.append(reply)
     if st.session_state["speech"] == True:
         st.session_state.talk_content = mytts(reply["content"])
 
@@ -179,7 +227,7 @@ def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],m
 def show():
     for section in st.session_state["session"]:
         with show_talk.chat_message(section['role']):
-            st.write(section['content'],unsafe_allow_html=True)
+            st.write(section['content'])
 
 
 async def run_provider(content,model,provider: g4f.Provider.BaseProvider):
@@ -249,10 +297,7 @@ def talkg4f(message,dialogue_history,session,model=st.session_state.g4fmodel,pro
     )
     reply = {'role':'assistant','content':response}
     session.append(reply)
-    if not st.session_state["memory"]:
-        dialogue_history.pop()
-    else:
-        dialogue_history.append(reply)
+    dialogue_history.append(reply)
     
     st.session_state.talk_content = mytts(reply["content"])
 
@@ -263,6 +308,90 @@ def audio2text(audio_prompt,language):
     output = st.session_state.sr.recognize_google(audio_data,language=language)
     return output
 
+
+def text2img(prompt,token=st.session_state.huggingfaceToken,StableDiffusion_URL=st.session_state.StableDiffusion_URL):
+
+    def query(payload):
+        try:
+            response = requests.post(StableDiffusion_URL, headers=StableDiffusion_headers, json=payload, timeout=60)
+            if response.status_code == 200:
+                return True, response.content
+            else:
+                return False,response.content
+        except requests.exceptions.RequestException as e:
+            return False,e
+    
+    StableDiffusion_headers = {"Authorization":"Bearer "+token}
+    
+    show_draw_img()
+    flag,response = query({
+        "inputs":prompt,
+        "negative_prompt":st.session_state.negative_prompt,
+    })
+    
+    image = response
+    st.session_state.draw_hisgory.append({"prompt":prompt,"image":image,"flag":flag})
+    with show_draw.chat_message("assistant"):
+        if flag:
+            st.image(image,prompt,use_column_width=True)
+        else:
+            st.write(prompt,"\n",image)
+
+
+def show_draw_img():
+    for section in st.session_state.draw_hisgory:
+        with show_draw.chat_message("assistant"):
+            if section["flag"]:
+                st.image(section["image"],section["prompt"],use_column_width=True)
+            else:
+                st.write(section["prompt"],"\n",section["image"])
+
+
+def get_html(url:str,scale:str):
+    html_tamplate = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+            }
+
+            .iframe-container {
+            overflow: hidden;
+            position: relative;
+            width: 100%; /* 你希望显示的宽度 */
+            height: 100%; /* 你希望显示的高度 */
+            }
+
+            .iframe-container iframe {
+                width: 100%;
+                height: 100%;
+                border: 0;
+                transform: scale(scale_size); /* 缩放倍数，根据需要调整 */
+                z-index: 2;
+            }
+        </style>
+        </head>
+        <body>
+
+        <div class="iframe-container">
+            <iframe src="url" frameborder="0"></iframe>
+        </div>
+            
+        </body>
+        </html>
+        """.replace("url",url).replace("scale_size",scale)
+    return html_tamplate
+            
 ########################### 侧边栏：设置、测试 ###########################
 
 
@@ -274,50 +403,70 @@ with st.sidebar:
         if st.session_state.get('🆕 New Chat'):
             st.session_state.dialogue_history = []
             st.session_state["session"] = []
+            st.session_state["draw_hisgory"] = []
         st.button('🆕 New Chat',use_container_width=True,type='primary',key="🆕 New Chat")
-
-
-    with st.container():
-        if st.button("🕵️‍♂️Search Providers",use_container_width=True,key="🕵️‍♂️Search Providers"):
-            with show_talk:
-                st.session_state.providers_available = []
-                test_prompt = "请回复“收到”两字，不要有任何多余解释和字符。"
-                test_provider(test_prompt,st.session_state.g4fmodel)
         
-
-
-    # 设置
+    
+    # 聊天设置
     with st.container():
-        with st.expander("**Settings**"):
-            st.session_state["model"] = st.selectbox('models', sorted(st.session_state._models_str))
-            provider = st.selectbox('provider', sorted(st.session_state.providers_available))
+        with st.expander("**Chat Settings**"):
+            st.button("🕵️‍♂️Search Providers",use_container_width=True,key="🕵️‍♂️Search Providers")
+            st.session_state["model"] = st.selectbox('Chat Models', sorted(st.session_state._models_str))
+            provider = st.selectbox('Providers', sorted(st.session_state.providers_available))
             speech = st.toggle('speech', st.session_state.speech)
-            memory = st.toggle('memory', st.session_state["memory"])
             stream =  st.toggle('stream', ["True","False"])
             temperature = st.slider('temperature', 0.0, 2.0, st.session_state["temperature"])
-            if st.session_state.get('Save'):
+            new_file = st.file_uploader("Chat short file",label_visibility="collapsed")
+            if st.session_state.get('Save Chat Settings'):
                 st.session_state.g4fmodel = st.session_state.models_list[st.session_state["model"]]
                 st.session_state.provider = st.session_state.providers_list[provider]
                 st.session_state.temperature =temperature
                 st.session_state.speech =speech
-                st.session_state.memory =memory
                 st.session_state.stream =stream
+                if new_file:
+                    file_name,file_type = collect_file(new_file)
+                    st.session_state.dialogue_history = get_file_reader(new_file,file_type)
                 st.balloons()
                 if st.session_state.mode == "**🤖Chat**":
                     show()
-            st.button('Save',use_container_width=True,key="Save")
-
+                elif st.session_state.mode == "**🎨Text2Img**":
+                    show_draw_img()
+            if st.session_state.get("🕵️‍♂️Search Providers"):
+                with show_talk:
+                    st.session_state.providers_available = []
+                    test_prompt = "请回复“收到”两字，不要有任何多余解释和字符。"
+                    test_provider(test_prompt,st.session_state.g4fmodel)
+            st.button('Save',use_container_width=True,key="Save Chat Settings")
     
-    with st.container():
-        new_file = st.file_uploader("上传短文件")
-        if st.session_state.get('Upload File📄') and new_file is not None:
-                file_name,file_type = collect_file(new_file)
-                st.session_state.dialogue_history = get_file_reader(new_file,file_type)
-        st.button('Upload File📄',use_container_width=True,key='Upload File📄')
 
-    # 模式
+    # 绘画设置
     with st.container():
-        st.session_state["mode"] = st.radio("Choose the mode",["**🤖Chat**","**💬Talk**","**🚀Introduce**"])
+        with st.expander("**Draw Settings**"):
+            dm = st.selectbox('Draw Models', sorted(st.session_state.draw_model_list.keys(),key=lambda x:x.split("-")[0]))
+            huggingfaceToken_input = st.text_input('Huggingface Token',type='password',value=st.session_state.huggingfaceToken)
+            negative_prompt = st.text_input('Negative Prompt',value=st.session_state.negative_prompt)
+            if st.session_state.get('Save Draw Settings'):
+                st.session_state.draw_model = dm
+                st.session_state.StableDiffusion_URL = st.session_state.draw_model_list[dm]
+                huggingfaceToken_hash = sha256_hash(huggingfaceToken_input.strip())
+                if huggingfaceToken_hash in st.secrets.pwsds:
+                    st.session_state.huggingfaceToken = st.secrets.huggingfaceTokens[st.secrets.pwsds[huggingfaceToken_hash]]
+                else:
+                    st.session_state.huggingfaceToken = huggingfaceToken_input
+                st.session_state.negative_prompt = negative_prompt
+                st.balloons()
+                if st.session_state.mode == "**🤖Chat**":
+                    show()
+                elif st.session_state.mode == "**🎨Text2Img**":
+                    show_draw_img()
+            st.button('Save',use_container_width=True,key="Save Draw Settings")
+        
+    
+    
+    # 模式
+    with st.container(border=True):
+        with st.container():
+            st.session_state["mode"] = st.radio("Choose the mode",["**🤖Chat**","**💬Talk**","**🎨Text2Img**","**🔗Other Sites**","**🚀Introduce**"])
 
 
 
@@ -354,7 +503,32 @@ elif st.session_state["mode"] == "**💬Talk**":
             speech_prompt = audio2text(st.session_state.audio_prompt,st.session_state.speech_language[-2:])
             message = {"role":"user","content":speech_prompt}
             talkg4f(message,st.session_state["dialogue_history"],st.session_state["session"])
+
+elif st.session_state["mode"] == "**🎨Text2Img**":
+    # 用户输入区域
+    header.write("<h2> 🎨 "+st.session_state.draw_model+"</h2>",unsafe_allow_html=True)
+    draw_prompt = st.chat_input("Send your prompt")
+    if draw_prompt:
+        text2img(draw_prompt)
+
+elif st.session_state["mode"] == "**🔗Other Sites**":
+    with show_webs:
+        header.write("<h2> 🔗Other Sites"+"</h2>",unsafe_allow_html=True)
+        tab1,tab2,tab3 = st.tabs(["**NovelAI Tags**","**Civitai Gallery**","Others"])
+        with tab1:
+            # html_source = get_html("https://novelai-tag.vercel.app/","1")
+            # st.components.v1.html(html_source, height=1040, width=700)
+            st.components.v1.iframe("https://novelai-tag.vercel.app/",height=700,scrolling=True,width=700)
+            st.link_button(label="go to novelai-tag",url="https://novelai-tag.vercel.app/")
+        with tab2:
+            # html_source = get_html("https://civitai.com/images","1")
+            # st.components.v1.html(html_source, height=1040, width=800)
+            st.components.v1.iframe("https://civitai.com/images",height=700)
+            st.link_button(label="go to Civitai Gallery",url="https://civitai.com/images")
+        with tab3:
+            st.write(st.session_state.introduce)
+    st.write("网络数据仅供参考，非盈利，仅供学习参考")
 else:
     with show_introduce:
-        header.write("<h2> 🚀 "+st.session_state["model"]+"</h2>",unsafe_allow_html=True)
+        header.write("<h2> 🚀 Intorduce"+"</h2>",unsafe_allow_html=True)
         st.write(st.session_state.introduce)
