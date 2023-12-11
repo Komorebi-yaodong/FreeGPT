@@ -190,7 +190,8 @@ def chatg4f(message,dialogue_history,session,stream=st.session_state["stream"],m
     if len(dialogue_history) != 0 and len(dialogue_history) != 0:
         if dialogue_history[-1]["role"] == "user":
             dialogue_history.pop()
-            session.pop
+        if session[-1]["role"] == "user":
+            session.pop()
     # 将当前消息添加到对话历史中
     session.append(message)
     dialogue_history.append(message)
