@@ -272,7 +272,8 @@ def mytts(text):
                 </script>
                 """
         html(md)
-
+        
+    text=text.replace("'''"," ").replace("**"," ").replace("$$"," ")
     lang,conf = langid.classify(text)
     tts = gTTS(text=text,lang=lang)
     speach_BytesIO = io.BytesIO()
