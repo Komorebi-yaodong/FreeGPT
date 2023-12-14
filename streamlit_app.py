@@ -14,7 +14,7 @@ import hashlib
 import base64
 import langid
 import PyPDF2
-import time
+import json
 import g4f
 import io
 
@@ -40,7 +40,6 @@ if "models_list" not in st.session_state:
     st.session_state["sys_prompt"] = "";
     st.session_state["mode"] = "**🚀introudce**"
     st.session_state["speech"] = True
-    st.session_state["talk_content"] = io.BytesIO()
     st.session_state["speech_language"] = "zh"
     st.session_state["audio_prompt"] = None
     st.session_state.sr = sr.Recognizer()
@@ -97,6 +96,10 @@ if "models_list" not in st.session_state:
         "text-davinci-003",
     ]
     st.session_state.author_key = ""
+    st.session_state.translate_session = []
+    st.session_state.lang_lists = ["中文-zh","English-en","日本語-ja","Русский язык-ru","Deutsch-de","Français-fr","중국어-ko"]
+    st.session_state.target_lang = st.session_state.lang_lists[0]
+    st.session_state.translate_speech = True
 
 ########################### element ###########################
 
@@ -110,6 +113,8 @@ show_introduce = st.container(border=True)
 # 语音对话
 show_mine_speech = st.empty()
 show_ai_speech = st.empty()
+# deeplx翻译
+show_translate = st.container()
 # 文生图
 show_draw = st.container()
 # 其他网站
@@ -208,34 +213,39 @@ def get_file_reader(file,type):
 
 
 def gpt_resopnse(model,provider,dialogue_history,stream,temperature,openai_set):
-    if openai_set["flag"]:
-        client = OpenAI(
-            api_key=openai_set["api_key"],
-            base_url=openai_set["api_base"],
-        )
-        response = client.chat.completions.create(
-            model=openai_set["api_model"],
-            messages=dialogue_history,
-            temperature=temperature, # 控制模型输出的随机程度
-            stream=stream,
-        )
-    else:
-        if stream:
-            response = g4f.ChatCompletion.create(
-                model=model,
-                provider = provider,
+    try:
+        if openai_set["flag"]:
+            client = OpenAI(
+                api_key=openai_set["api_key"],
+                base_url=openai_set["api_base"],
+            )
+            response = client.chat.completions.create(
+                model=openai_set["api_model"],
                 messages=dialogue_history,
                 temperature=temperature, # 控制模型输出的随机程度
-                stream=stream
+                stream=stream,
             )
         else:
-            response = g4f.ChatCompletion.create(
-                model=model,
-                provider = provider,
-                messages=dialogue_history,
-                temperature=temperature, # 控制模型输出的随机程度
-            )
-    return response
+            if stream:
+                response = g4f.ChatCompletion.create(
+                    model=model,
+                    provider = provider,
+                    messages=dialogue_history,
+                    temperature=temperature, # 控制模型输出的随机程度
+                    stream=stream
+                )
+            else:
+                response = g4f.ChatCompletion.create(
+                    model=model,
+                    provider = provider,
+                    messages=dialogue_history,
+                    temperature=temperature, # 控制模型输出的随机程度
+                )
+        return response
+    except Exception as e:
+        st.error("GPT response error: {}".format(e))
+        return e
+    
 
 
 def chatg4f(message,dialogue_history,session,openai_set=st.session_state.openai_set,stream=st.session_state["stream"],model=st.session_state.g4fmodel,provider=st.session_state.provider,temperature=st.session_state.temperature):
@@ -249,7 +259,7 @@ def chatg4f(message,dialogue_history,session,openai_set=st.session_state.openai_
     dialogue_history.append(message)
     # 发送请求给 OpenAI GPT
     response = gpt_resopnse(model,provider,dialogue_history,stream,temperature,openai_set=openai_set)
-    show()
+    show_chat()
     reply = {'role':'assistant','content':""}
     if openai_set["flag"]:
         if stream:
@@ -276,10 +286,10 @@ def chatg4f(message,dialogue_history,session,openai_set=st.session_state.openai_
     session.append(reply)
     dialogue_history.append(reply)
     if st.session_state["speech"] == True:
-        st.session_state.talk_content = mytts(reply["content"])
+        mytts(reply["content"])
 
 
-def show():
+def show_chat():
     for section in st.session_state["session"]:
         with show_talk.chat_message(section['role']):
             st.write(section['content'])
@@ -354,7 +364,7 @@ def talkg4f(message,dialogue_history,session,openai_set=st.session_state.openai_
     session.append(reply)
     dialogue_history.append(reply)
     
-    st.session_state.talk_content = mytts(reply["content"])
+    mytts(reply["content"])
 
 
 @st.cache_data
@@ -401,7 +411,54 @@ def show_draw_img():
             else:
                 st.write(section["prompt"],"\n",section["image"])
 
-            
+
+def deeplx_translate(text,target_lang):
+    url = "https://api.deeplx.org/translate"
+
+    data = {
+        'text': text,
+        'source_lang': 'auto',
+        'target_lang': target_lang,
+    }
+    data = json.dumps(data)
+
+    headers = {
+        'Content-Type': 'application/json',
+    }
+
+    try:
+        response = requests.post(url,headers=headers,data=data)
+        if response.status_code == 200:
+            return True,response.json()
+        else:
+            return False,response.json()
+    except Exception as e:
+        st.error("Deeplx response error: {}".format(e))
+        return False,e
+
+
+def translate(text,target_lang):
+    st.session_state.translate_session.append({"role":"user","content":text})
+    show_translate_chat()
+    flag,result = deeplx_translate(text,target_lang)
+    if flag:
+        reply = result["data"]
+        st.session_state.translate_session.append({"role":"assistant","content":reply})
+        
+        with show_translate.chat_message("assistant"):
+            st.write(reply)
+        if st.session_state.translate_speech == True:
+            mytts(reply)
+    else:
+        st.error(result)
+
+
+def show_translate_chat():
+    for section in st.session_state.translate_session:
+        with show_translate.chat_message(section['role']):
+            st.write(section['content'])
+
+
 ########################### 侧边栏：设置、测试 ###########################
 
 
@@ -441,12 +498,16 @@ with st.sidebar:
         st.session_state.stream =st.session_state.stream
         st.session_state.sys_prompt = st.session_state.sys_prompt
         
+        # 更新translate参数
+        st.session_state.translate_speech = st.session_state.translate_speech
+        st.session_state.target_lang = st.session_state.target_lang
+
         # 更新text2img参数
         st.session_state.draw_model = st.session_state.draw_model
         st.session_state.StableDiffusion_URL = st.session_state.draw_model_list[st.session_state.draw_model]
         st.session_state.huggingfaceToken = st.session_state.huggingfaceToken
         st.session_state.negative_prompt = st.session_state.negative_prompt
-
+        
         # 更新会话
         if len(st.session_state.dialogue_history) == 0:
             if st.session_state.sys_prompt == "":
@@ -454,6 +515,7 @@ with st.sidebar:
             else:
                 st.session_state.dialogue_history = [{"role":"system","content":st.session_state.sys_prompt},]
             st.session_state.session = []
+
 
     # 新的开始
     with st.container():
@@ -464,6 +526,7 @@ with st.sidebar:
                 st.session_state.dialogue_history = [{"role":"system","content":st.session_state.sys_prompt},]
             st.session_state.session = []
             st.session_state.draw_hisgory = []
+            st.session_state.translate_session = []
         st.button('🆕 New Chat',use_container_width=True,type='primary',key="🆕 New Chat")
         
     with st.container():
@@ -499,7 +562,11 @@ with st.sidebar:
             if st.session_state.get("ChatFile"):
                 get_file_chat()
 
-    
+    with st.container():
+        with st.expander("**Translate Settings**"):
+            st.session_state.target_lang = st.selectbox("Target Language",st.session_state.lang_lists,on_change=get_save())
+            st.session_state.translate_speech = st.toggle('translate speech', st.session_state.speech,on_change=get_save())
+
     # 绘画设置
     with st.container():
         with st.expander("**Draw Settings**"):
@@ -515,7 +582,7 @@ with st.sidebar:
     # 模式
     with st.container(border=True):
         with st.container():
-            st.session_state["mode"] = st.radio("Choose the mode",["**🤖Chat**","**💬Talk**","**🎨Text2Img**","**🔗Other Sites**","**🚀Introduce**"])
+            st.session_state["mode"] = st.radio("Choose the mode",["**🤖Chat**","**💬Talk**","**🔤Deeplx**","**🎨Text2Img**","**🔗Other Sites**","**🚀Introduce**"])
 
 
     if st.session_state.get("🕵️‍♂️Search Providers"):
@@ -530,9 +597,11 @@ with st.sidebar:
         get_save()
         # 更新会话展示
         if st.session_state.mode == "**🤖Chat**":
-            show()
+            show_chat()
         elif st.session_state.mode == "**🎨Text2Img**":
             show_draw_img()
+        elif st.session_state["mode"] == "**🔤Deeplx**":
+            show_translate_chat()
 
 ########################### 聊天展示区 ###########################
 
@@ -553,7 +622,7 @@ elif st.session_state["mode"] == "**💬Talk**":
     show_ai_speech = st.container()
 
     with show_mine_speech.container():
-        st.session_state.speech_language = st.selectbox("🎙️language",["中文-zh","English-en","日本語-ja","Русский язык-ru","Deutsch-de","Français-fr","중국어-ko"],key="language")
+        st.session_state.speech_language = st.selectbox("🎙️language",st.session_state.lang_lists)
         st.session_state.audio_prompt = mic_recorder(
             start_prompt="🎙️开始说话",
             stop_prompt="🛑结束说话", 
@@ -569,6 +638,13 @@ elif st.session_state["mode"] == "**💬Talk**":
             speech_prompt = audio2text(st.session_state.audio_prompt,st.session_state.speech_language[-2:])
             message = {"role":"user","content":speech_prompt}
             talkg4f(message,st.session_state["dialogue_history"],st.session_state["session"])
+
+elif st.session_state["mode"] == "**🔤Deeplx**":
+    header.write("<h2> 🔤 Deeplx-"+st.session_state.target_lang+"</h2>",unsafe_allow_html=True)
+    txt_prompt = st.chat_input("Input your content to be translated",max_chars=5000)
+    if txt_prompt:
+        translate(txt_prompt,st.session_state.target_lang[-2:])
+
 
 elif st.session_state["mode"] == "**🎨Text2Img**":
     # 用户输入区域
@@ -594,6 +670,7 @@ elif st.session_state["mode"] == "**🔗Other Sites**":
         with tab3:
             st.write(st.session_state.introduce)
     st.write("网络数据仅供参考，非盈利，仅供学习参考")
+
 else:
     with show_introduce:
         header.write("<h2> 🚀 Intorduce"+"</h2>",unsafe_allow_html=True)
