@@ -1,7 +1,10 @@
 # Free GPT(gpt4free + streamlit)
 
 > https://github.com/Komorebi-yaodong/FreeGPT.git
-
+## notion
+这个库的特点是提供了调用gpt4free可用接口的前端，但是缺点也很明显：我不太熟悉streamlit时写的代码，所以内容可能有点杂乱gpt4free稳定性不高。不妨使用免费的gpt_api_free项目中的API和gemini-pro的token以及hugging face的token来使用AI吧，我也写了一个前端，项目链接是https://github.com/Komorebi-yaodong/AiTool.git
+---
+The characteristic of this library is that it provides a front-end for calling the available interfaces of gpt4free, but the disadvantage is also obvious: I am not very familiar with the code written during streamlit, so the content may be a bit messy and gpt4free has low stability. Why not use the free GPT_ API_ Let's use AI with the API, Gemini Pro tokens, and Hugging Face tokens in the free project. I have also written a front-end, and the project link is https://github.com/komorebi-yaodong/aitool.git
 ---
 
 ## Getting Started
